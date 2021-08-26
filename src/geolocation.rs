@@ -1,17 +1,7 @@
 use serde::Deserialize;
-use std::{
-    collections::HashMap,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    thread::{self, JoinHandle},
-    time,
-};
+use std::{collections::HashMap, sync::Arc};
 
-use parking_lot::{Condvar, Mutex, RwLock};
-
-use crate::app::App;
+use parking_lot::RwLock;
 
 const LOCATION_API_URL: &str = "https://ifconfig.based.computer/json";
 

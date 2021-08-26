@@ -3,10 +3,7 @@ use serde_json::Value;
 
 use std::{
     collections::HashMap,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::Arc,
     thread::{self, JoinHandle},
     time,
 };
@@ -128,19 +125,22 @@ pub enum ServerLocation {
 #[derive(Debug, Clone)]
 pub struct Server {
     pub data: ServerData,
-    pub location: ServerLocation,
+    //pub location: ServerLocation,
     // ui update skip optimization
     pub updated: bool,
     pub offline: bool,
 }
 
 impl Server {
-    pub fn new(data: &ServerData, locations: &Arc<RwLock<HashMap<IP, Location>>>) -> Self {
-        let location = ip_to_location(IP::Remote(data.ip.clone()), locations).unwrap();
+    pub fn new(
+        data: &ServerData,
+        //locations: &Arc<RwLock<HashMap<IP, Location>>>
+    ) -> Self {
+        //let location = ip_to_location(IP::Remote(data.ip.clone()), locations).unwrap();
 
         Self {
             data: data.clone(),
-            location: ServerLocation::Resolved(location),
+            //location: ServerLocation::Resolved(location),
             updated: true,
             offline: false,
         }

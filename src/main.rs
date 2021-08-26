@@ -1,7 +1,8 @@
 mod app;
 mod geolocation;
+mod input;
 mod types;
-mod ui;
+mod views;
 
 use std::{
     collections::HashMap,
@@ -9,11 +10,7 @@ use std::{
     thread::{self, JoinHandle},
     time,
 };
-use std::{
-    env, io,
-    sync::mpsc::{self, Receiver, Sender},
-    time::{Duration, Instant},
-};
+use std::{env, io, sync::mpsc};
 
 use parking_lot::{Condvar, Mutex, RwLock};
 use tui::{
@@ -22,26 +19,22 @@ use tui::{
 };
 
 use crossterm::{
-    event::{self, DisableMouseCapture, Event as CEvent, KeyCode},
+    event::{DisableMouseCapture, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
 use log::LevelFilter;
 
-use crate::app::{App, ServersState};
+use crate::app::App;
 use crate::geolocation::{ip_to_location, Location, IP};
+use crate::input::{spawn_input_thread, Event, UserInput};
 use crate::types::{Server, ServerListData};
 
 const SERVER_LIST_URL: &str = "https://api.unitystation.org/serverlist";
-const GITHUB_REPO_URL: &str = "https://github.com/unitystation/unitystation";
+// const GITHUB_REPO_URL: &str = "https://github.com/unitystation/unitystation";
 
 type StopLock = Arc<(Mutex<bool>, Condvar)>;
-
-enum Event<I> {
-    Input(I),
-    Tick,
-}
 
 fn setup_panic_hook() {
     std::panic::set_hook(Box::new(|panic_info| {
@@ -88,9 +81,41 @@ pub fn spawn_location_fetch_thread(
         .expect("failed to build thread")
 }
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
+fn calculate_hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
+}
+
+pub fn update_servers(servers: &mut HashMap<String, Server>, data: ServerListData) {
+    let mut existing = servers.clone();
+
+    for sv in data.servers {
+        if let Some(sv_existing) = servers.get_mut(&sv.ip) {
+            existing.remove(&sv.ip);
+
+            if calculate_hash(&sv_existing.data) != calculate_hash(&sv) {
+                sv_existing.updated = true;
+            }
+
+            sv_existing.offline = false;
+            sv_existing.data = sv;
+        } else {
+            servers.insert(sv.ip.clone(), Server::new(&sv));
+        }
+    }
+
+    for ip in existing.keys() {
+        servers.get_mut(ip).unwrap().offline = true;
+    }
+}
+
 pub fn spawn_server_fetch_thread(
     interval: u64,
-    servers: Arc<RwLock<ServersState>>,
+    servers: Arc<RwLock<HashMap<String, Server>>>,
     stop_lock: StopLock,
 ) -> JoinHandle<()> {
     thread::Builder::new()
@@ -99,15 +124,15 @@ pub fn spawn_server_fetch_thread(
             let duration = time::Duration::from_secs(interval);
 
             let loop_body = move || {
-                servers.write().clear_error();
+                //servers.write().clear_error();
 
                 let req = match reqwest::blocking::get(SERVER_LIST_URL) {
                     Ok(req) => req,
                     Err(err) => {
                         log::error!("{}", err);
-                        servers
-                            .write()
-                            .set_error(&format!("error making request: {}", err));
+                        // servers
+                        //     .write()
+                        //     .set_error(&format!("error making request: {}", err));
                         return;
                     }
                 };
@@ -116,16 +141,16 @@ pub fn spawn_server_fetch_thread(
                     Ok(resp) => resp,
                     Err(err) => {
                         log::error!("{}", err);
-                        servers
-                            .write()
-                            .set_error(&format!("error decoding response: {}", err));
+                        // servers
+                        //     .write()
+                        //     .set_error(&format!("error decoding response: {}", err));
                         return;
                     }
                 };
 
                 {
                     let mut servers = servers.write();
-                    servers.update(resp);
+                    update_servers(&mut servers, resp);
                     log::info!("{:?}", &servers);
                 }
             };
@@ -145,12 +170,12 @@ pub fn spawn_server_fetch_thread(
 
 fn spawn_threads(app: &mut App) -> Vec<JoinHandle<()>> {
     vec![
-        spawn_server_fetch_thread(20, app.servers.clone(), app.stop_lock.clone()),
-        spawn_location_fetch_thread(
-            5,
-            app.servers.read().locations.clone(),
-            app.stop_lock.clone(),
-        ),
+        spawn_server_fetch_thread(20, app.state.servers.clone(), app.state.stop_lock.clone()),
+        // spawn_location_fetch_thread(
+        //     5,
+        //     app.servers.read().locations.clone(),
+        //     app.stop_lock.clone(),
+        // ),
     ]
 }
 
@@ -162,32 +187,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     simple_logging::log_to_file("test.log", LevelFilter::Debug).unwrap();
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    let data_dir = env::var("XDG_DATA_HOME").unwrap_or_else(|_| "~/.local/share".to_string());
+    let data_dir = { env::var("XDG_DATA_HOME").unwrap_or_else(|_| "~/.local/share".to_string()) };
 
     log::debug!("data dir: {}", data_dir);
-
-    let (tx, rx) = mpsc::channel();
-
-    thread::spawn(move || {
-        let tick_rate = Duration::from_millis(250);
-        let mut last_tick = Instant::now();
-
-        loop {
-            // poll for tick rate duration, if no events, sent tick event.
-            let timeout = tick_rate
-                .checked_sub(last_tick.elapsed())
-                .unwrap_or_else(|| Duration::from_secs(0));
-            if event::poll(timeout).unwrap() {
-                if let CEvent::Key(key) = event::read().unwrap() {
-                    tx.send(Event::Input(key)).unwrap();
-                }
-            }
-            if last_tick.elapsed() >= tick_rate {
-                tx.send(Event::Tick).unwrap();
-                last_tick = Instant::now();
-            }
-        }
-    });
 
     let mut app = app::App::new();
 
@@ -206,35 +208,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Terminal::new(backend)?
     };
 
+    let (tx, rx) = mpsc::channel();
+    spawn_input_thread(250, tx);
+
     loop {
         // if app.state_changed() {
-        terminal.draw(|f| ui::draw(f, &mut app))?;
+        terminal.draw(|f| app.draw(f))?;
         // }
 
         match rx.recv()? {
             Event::Input(event) => match event.code {
                 KeyCode::Char('q') => {
-                    terminal.draw(|f| ui::draw_exit_view(f, &mut app))?;
+                    // terminal.draw(|f| ui::draw_exit_view(f, &mut app))?;
 
                     break;
                 }
                 KeyCode::Left => {
-                    app.on_left();
+                    app.on_input(&UserInput::Left);
                 }
                 KeyCode::Right => {
-                    app.on_right();
+                    app.on_input(&UserInput::Right);
                 }
                 KeyCode::Up => {
-                    app.on_up();
+                    app.on_input(&UserInput::Up);
                 }
                 KeyCode::Down => {
-                    app.on_down();
+                    app.on_input(&UserInput::Down);
                 }
                 KeyCode::Esc | KeyCode::Backspace => {
-                    app.on_back();
+                    app.on_input(&UserInput::Back);
                 }
                 KeyCode::Enter => {
-                    app.on_enter();
+                    app.on_input(&UserInput::Enter);
                 }
                 _ => {}
             },
@@ -244,10 +249,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     {
         log::warn!("waiting stop lock");
-        let mut stop = app.stop_lock.0.lock();
+        let mut stop = app.state.stop_lock.0.lock();
         *stop = true;
         log::warn!("set stop lock");
-        app.stop_lock.1.notify_all();
+        app.state.stop_lock.1.notify_all();
         log::warn!("notified stop lock");
     }
 
