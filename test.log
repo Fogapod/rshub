@@ -1,0 +1,16 @@
+[00:00:00.000] (7f44e6600940) DEBUG  data dir: /home/eugene/.local/share
+[00:00:00.001] (7f44e63fe640) DEBUG  starting new connection: https://api.unitystation.org/
+[00:00:00.051] (7f44e63fe640) DEBUG  No cached session for DNSNameRef("api.unitystation.org")
+[00:00:00.051] (7f44e63fe640) DEBUG  Not resuming any session
+[00:00:00.100] (7f44e63fe640) DEBUG  ALPN protocol is Some(b"http/1.1")
+[00:00:00.100] (7f44e63fe640) DEBUG  Using ciphersuite TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+[00:00:00.100] (7f44e63fe640) DEBUG  Server supports tickets
+[00:00:00.101] (7f44e63fe640) DEBUG  ECDHE curve is ECParameters { curve_type: NamedCurve, named_group: X25519 }
+[00:00:00.101] (7f44e63fe640) DEBUG  Server DNS name is DNSName("api.unitystation.org")
+[00:00:00.151] (7f44e63fe640) DEBUG  Session saved
+[00:00:00.203] (7f44e63fe640) DEBUG  response '200 OK' for https://api.unitystation.org/serverlist
+[00:00:00.204] (7f44e65ff640) INFO   {"94.130.57.141": Server { data: ServerData { name: "Unitystation - EU02 Staging", fork: "UnityStationDevelop", build: 21082412, map: "OutpostStation", gamemode: "Secret", time: "02:33", players: 0, ip: "94.130.57.141", port: 7777, fps: 24, download: "https://unitystationfile.b-cdn.net/UnityStationDevelop/StandaloneLinux64/21082412.zip" }, updated: true, offline: false }, "96.126.112.90": Server { data: ServerData { name: "Solidarity Station", fork: "Unitystation", build: 4121, map: "FallStation", gamemode: "Secret", time: "19:09", players: 1, ip: "96.126.112.90", port: 7777, fps: 90, download: "https://unitystationfile.b-cdn.net/lin4121.zip" }, updated: true, offline: false }, "51.158.78.22": Server { data: ServerData { name: "Wild FrontierFFA Station", fork: "Unitystation", build: 4119, map: "loading", gamemode: "Secret", time: "00:42", players: 0, ip: "51.158.78.22", port: 7777, fps: 99, download: "" }, updated: true, offline: false }}
+[00:00:09.061] (7f44e6600940) WARN   waiting stop lock
+[00:00:09.062] (7f44e6600940) WARN   set stop lock
+[00:00:09.062] (7f44e6600940) WARN   notified stop lock
+[00:00:09.062] (7f44e6600940) INFO   joining Some("server_fetch")
