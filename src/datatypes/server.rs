@@ -1,18 +1,6 @@
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    thread::{self, JoinHandle},
-    time,
-};
-
-use parking_lot::{Condvar, Mutex, RwLock};
-
-use crate::app::App;
-use crate::geolocation::{ip_to_location, Location, IP};
-
 fn deserialize_ok_or_default<'de, T, D>(deserializer: D) -> Result<T, D::Error>
 where
     T: Deserialize<'de> + Default,
@@ -115,33 +103,18 @@ pub struct ServerListData {
 }
 
 #[derive(Debug, Clone)]
-pub enum ServerLocation {
-    // geolocation feature disabled
-    Unsupported,
-    Pending,
-    Resolved(Location),
-}
-
-#[derive(Debug, Clone)]
 pub struct Server {
     pub data: ServerData,
-    //pub location: ServerLocation,
     // ui update skip optimization
-    pub updated: bool,
+    // pub updated: bool,
     pub offline: bool,
 }
 
 impl Server {
-    pub fn new(
-        data: &ServerData,
-        //locations: &Arc<RwLock<HashMap<IP, Location>>>
-    ) -> Self {
-        //let location = ip_to_location(IP::Remote(data.ip.clone()), locations).unwrap();
-
+    pub fn new(data: &ServerData) -> Self {
         Self {
             data: data.clone(),
-            //location: ServerLocation::Resolved(location),
-            updated: true,
+            // updated: true,
             offline: false,
         }
     }

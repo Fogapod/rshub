@@ -1,7 +1,4 @@
 use serde::Deserialize;
-use std::{collections::HashMap, sync::Arc};
-
-use parking_lot::RwLock;
 
 const LOCATION_API_URL: &str = "https://ifconfig.based.computer/json";
 
@@ -17,18 +14,7 @@ pub struct Location {
     pub latitude: f64,
 }
 
-pub fn ip_to_location(
-    ip: IP,
-    locations: &Arc<RwLock<HashMap<IP, Location>>>,
-) -> Result<Location, Box<dyn std::error::Error>> {
-    {
-        let locations = locations.read();
-
-        if let Some(&location) = locations.get(&ip) {
-            return Ok(location);
-        }
-    }
-
+pub fn fetch(ip: &IP) -> Result<Location, Box<dyn std::error::Error>> {
     let client = reqwest::blocking::Client::new();
 
     let mut request = client.get(LOCATION_API_URL);
@@ -38,11 +24,6 @@ pub fn ip_to_location(
     }
 
     let resp = request.send().unwrap().json::<Location>().unwrap();
-
-    {
-        let mut locations = locations.write();
-        locations.insert(ip, resp);
-    }
 
     Ok(resp)
 }

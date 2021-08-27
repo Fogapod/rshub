@@ -1,88 +1,46 @@
 use std::io;
 
+use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
 
-use parking_lot::{Condvar, Mutex, RwLock};
 use tui::backend::CrosstermBackend;
-use tui::layout::Rect;
 use tui::terminal::Frame;
-use tui::widgets::ListState;
+
+use crossterm::event::{Event, KeyCode, MouseEventKind};
 
 use crate::input::UserInput;
-use crate::types::Server;
+use crate::states::{AppState, ServersState};
 
 use crate::views::{
     commits::CommitView, installations::InstallationView, servers::ServerView, tabs::TabView,
+    ActionResult, AppView, ViewType,
 };
 
-#[derive(PartialEq, Eq, Hash, Debug)]
-pub enum ViewType {
-    Tab,
-    Server,
-    Installations,
-    Commits,
-}
-
-pub trait Drawable {
-    fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: &mut AppState,
-    ) -> Option<Rect>;
-}
-
-pub enum ActionResult {
-    Continue,
-    Stop,
-    ReplaceView(ViewType),
-}
-
-pub trait AppView: Drawable {
-    fn view_type(&self) -> ViewType;
-
-    fn on_input(&mut self, _: &UserInput, _: &AppState) -> ActionResult {
-        ActionResult::Continue
-    }
-}
-
-type StopLock = Arc<(Mutex<bool>, Condvar)>;
-
-pub struct AppState {
-    pub servers: Arc<RwLock<HashMap<String, Server>>>,
-    pub(crate) stop_lock: StopLock,
-}
-
-impl AppState {
-    pub fn new(servers: Arc<RwLock<HashMap<String, Server>>>) -> Self {
-        Self {
-            stop_lock: Arc::new((Mutex::new(false), Condvar::new())),
-            servers,
-        }
-    }
-}
+use crate::waitable_mutex::WaitableMutex;
 
 pub struct App {
     views: HashMap<ViewType, Box<dyn AppView>>,
 
     view_stack: Vec<ViewType>,
 
-    pub state: AppState,
+    pub state: Arc<AppState>,
+    pub stopped: bool,
+    pub(crate) stop_lock: Arc<WaitableMutex<bool>>,
 }
 
 impl App {
     pub fn new() -> Self {
-        let servers = Arc::new(RwLock::new(HashMap::new()));
-
         let mut instance = Self {
-            state: AppState::new(servers.clone()),
+            state: Arc::new(AppState::new()),
             views: HashMap::new(),
 
-            view_stack: vec![ViewType::Tab, ViewType::Server],
+            view_stack: vec![ViewType::Tab, ViewType::Servers],
+            stopped: false,
+            stop_lock: Arc::new(WaitableMutex::new(false)),
         };
 
         instance.register_view(Box::new(TabView::new()));
-        instance.register_view(Box::new(ServerView::new(servers)));
+        instance.register_view(Box::new(ServerView::new()));
         instance.register_view(Box::new(InstallationView::new()));
         instance.register_view(Box::new(CommitView::new()));
 
@@ -93,12 +51,20 @@ impl App {
         self.views.insert(view.view_type(), view);
     }
 
+    pub fn spawn_threads(&self) -> Vec<std::thread::JoinHandle<()>> {
+        vec![ServersState::spawn_server_fetch_thread(
+            Duration::from_secs(20),
+            self.state.clone(),
+            self.stop_lock.clone(),
+        )]
+    }
+
     pub fn draw(&mut self, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
         let mut area = f.size();
 
         for tp in self.view_stack.iter_mut() {
             if let Some(widget) = self.views.get_mut(tp) {
-                match widget.draw(f, area, &mut self.state) {
+                match widget.draw(f, area, &self.state) {
                     None => break,
                     Some(ar) => area = ar,
                 }
@@ -110,21 +76,61 @@ impl App {
         // }
     }
 
-    pub(crate) fn on_input(&mut self, input: &UserInput) {
-        let mut view_to_insert = None;
+    pub(crate) fn on_input(&mut self, event: &Event) {
+        let input = match event {
+            Event::Key(key) => match key.code {
+                KeyCode::Left => Some(UserInput::Left),
+                KeyCode::Right => Some(UserInput::Right),
+                KeyCode::Up => Some(UserInput::Up),
+                KeyCode::Down => Some(UserInput::Down),
+                KeyCode::Esc | KeyCode::Backspace => Some(UserInput::Back),
+                KeyCode::Enter => Some(UserInput::Enter),
+                KeyCode::Tab => Some(UserInput::Tab),
+                KeyCode::Char(c) => Some(UserInput::Char(c)),
+                _ => None,
+            },
+            Event::Mouse(mouse) => match mouse.kind {
+                MouseEventKind::ScrollUp => Some(UserInput::Up),
+                MouseEventKind::ScrollDown => Some(UserInput::Down),
+                _ => None,
+            },
+            _ => None,
+        };
 
-        for tp in self.view_stack.iter_mut().rev() {
-            if let Some(widget) = self.views.get_mut(tp) {
-                if let ActionResult::ReplaceView(view) = widget.on_input(input, &self.state) {
-                    view_to_insert = Some(view);
+        if let Some(input) = input {
+            let mut actions = Vec::new();
+
+            for tp in self.view_stack.iter_mut().rev() {
+                if let Some(widget) = self.views.get_mut(tp) {
+                    match widget.on_input(&input, &self.state) {
+                        ActionResult::Stop => {
+                            break;
+                        }
+                        ActionResult::Exit => {
+                            actions.push(ActionResult::Exit);
+                            break;
+                        }
+                        result => actions.push(result),
+                    }
+                }
+            }
+
+            for action in actions {
+                match action {
+                    ActionResult::Exit => self.stop(),
+                    ActionResult::ReplaceView(view) => {
+                        if let Some(v) = self.view_stack.last_mut() {
+                            *v = view
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
+    }
 
-        if let Some(view) = view_to_insert {
-            if let Some(v) = self.view_stack.last_mut() {
-                *v = view
-            }
-        }
+    fn stop(&mut self) {
+        self.stopped = true;
+        self.stop_lock.set(true);
     }
 }

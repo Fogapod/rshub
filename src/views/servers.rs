@@ -1,129 +1,33 @@
 use std::cmp::Ordering;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::{collections::HashMap, sync::Arc};
 
-use parking_lot::{Condvar, Mutex, RwLock};
 use std::io;
-use tui::buffer::Buffer;
+
 use tui::layout::Rect;
-use tui::widgets::TableState;
 
 use tui::backend::CrosstermBackend;
 use tui::terminal::Frame;
 
-use crate::app::{ActionResult, AppState, AppView, Drawable, ViewType};
-use crate::geolocation::{Location, IP};
+use crate::datatypes::server::Server;
 use crate::input::UserInput;
-use crate::types::{Server, ServerListData};
+use crate::states::AppState;
+use crate::views::{ActionResult, AppView, Drawable, StatelessList, ViewType};
 
 use tui::{
-    backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
-    symbols,
     symbols::DOT,
     text::{Span, Spans, Text},
-    widgets::{
-        canvas::{Canvas, Line, Map, MapResolution, Rectangle},
-        BorderType,
-    },
-    widgets::{
-        Axis, BarChart, Block, Borders, Cell, Chart, Clear, Dataset, Gauge, LineGauge, List,
-        ListItem, Paragraph, Row, Sparkline, Table, Tabs, Wrap,
-    },
+    widgets::{Block, Borders, Paragraph, Row, Table, Wrap},
 };
-
-fn calculate_hash<T: Hash>(t: &T) -> u64 {
-    let mut s = DefaultHasher::new();
-    t.hash(&mut s);
-    s.finish()
-}
-
-pub struct StatelessList {
-    pub state: TableState,
-}
-
-impl StatelessList {
-    pub fn new() -> Self {
-        Self {
-            state: TableState::default(),
-        }
-    }
-
-    pub fn next(&mut self, item_count: usize) {
-        if item_count == 0 {
-            self.state.select(None);
-        } else {
-            match self.selected() {
-                None => self.state.select(Some(0)),
-                Some(i) => {
-                    if i < item_count - 1 {
-                        self.state.select(Some(i + 1))
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn previous(&mut self, item_count: usize) {
-        if item_count == 0 {
-            self.state.select(None);
-        } else {
-            match self.state.selected() {
-                None => self.state.select(Some(0)),
-                Some(i) => {
-                    if i != 0 {
-                        self.state.select(Some(i - 1))
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn unselect(&mut self) {
-        self.state.select(None);
-    }
-
-    pub fn selected(&self) -> Option<usize> {
-        self.state.selected()
-    }
-}
 
 pub struct ServerView {
     state: StatelessList,
-    servers: Arc<RwLock<HashMap<String, Server>>>,
 }
 
 impl ServerView {
-    pub fn new(servers: Arc<RwLock<HashMap<String, Server>>>) -> Self {
+    pub fn new() -> Self {
         Self {
             state: StatelessList::new(),
-            servers,
-        }
-    }
-
-    pub fn update(&mut self, data: ServerListData) {
-        let mut servers = self.servers.write();
-        let mut existing = servers.clone();
-
-        for sv in data.servers {
-            if let Some(sv_existing) = servers.get_mut(&sv.ip) {
-                existing.remove(&sv.ip);
-
-                if calculate_hash(&sv_existing.data) != calculate_hash(&sv) {
-                    sv_existing.updated = true;
-                }
-
-                sv_existing.offline = false;
-                sv_existing.data = sv;
-            } else {
-                servers.insert(sv.ip.clone(), Server::new(&sv));
-            }
-        }
-
-        for ip in existing.keys() {
-            servers.get_mut(ip).unwrap().offline = true;
         }
     }
 }
@@ -133,14 +37,9 @@ impl Drawable for ServerView {
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
         area: Rect,
-        app: &mut AppState,
+        app: &AppState,
     ) -> Option<Rect> {
-        let chunks = Layout::default()
-            .constraints([Constraint::Percentage(100)].as_ref())
-            .direction(Direction::Horizontal)
-            .split(area);
-
-        let servers = app.servers.read();
+        let servers = app.servers.servers.read();
 
         let offline_servers = servers.values().filter(|s| s.offline).count();
 
@@ -152,6 +51,16 @@ impl Drawable for ServerView {
             Ordering::Equal => a.data.name.cmp(&b.data.name),
             other => other,
         });
+
+        let selected_server = self.state.selected().map(|s| servers_to_be_sorted[s]);
+
+        let chunks = Layout::default()
+            .constraints([
+                Constraint::Percentage(if selected_server.is_some() { 66 } else { 100 }),
+                Constraint::Percentage(if selected_server.is_some() { 33 } else { 0 }),
+            ])
+            .direction(Direction::Vertical)
+            .split(area);
 
         let rows = servers_to_be_sorted.iter().map(|s| {
             let style = if s.offline {
@@ -184,12 +93,11 @@ impl Drawable for ServerView {
             .block(
                 Block::default()
                     .title(Span::styled(
-                        format!("SERVERS {}:{}", servers.len(), offline_servers),
+                        format!("SERVERS {}:{}", servers_to_be_sorted.len(), offline_servers),
                         Style::default().add_modifier(Modifier::BOLD),
                     ))
                     .title_alignment(Alignment::Center)
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Plain),
+                    .borders(Borders::ALL),
             )
             .widths(&[
                 Constraint::Percentage(45),
@@ -203,8 +111,70 @@ impl Drawable for ServerView {
                     .add_modifier(Modifier::BOLD),
             );
 
+        if let Some(selected) = selected_server {
+            let chunks = Layout::default()
+                .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+                .direction(Direction::Horizontal)
+                .split(chunks[1]);
+
+            let text1 = Text::from(format!(
+                r#"map:   {} ({})
+                   build: {}
+                   fork:  {}"#,
+                selected.data.map, selected.data.gamemode, selected.data.build, selected.data.fork
+            ));
+            let text2 = Text::from(format!(
+                r#"fps:     {}
+                   time:    {}
+                   address: {}:{}"#,
+                selected.data.fps, selected.data.time, selected.data.ip, selected.data.port
+            ));
+
+            let par1 = Paragraph::new(text1)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL - Borders::RIGHT)
+                        .title(Spans::from(vec![
+                            Span::styled(
+                                format!(" {}", selected.data.name),
+                                Style::default()
+                                    .add_modifier(Modifier::BOLD)
+                                    .fg(Color::Blue),
+                            ),
+                            Span::styled(
+                                format!(" {} ", DOT),
+                                Style::default().add_modifier(Modifier::BOLD),
+                            ),
+                        ]))
+                        .title_alignment(Alignment::Right),
+                )
+                .alignment(Alignment::Left)
+                .wrap(Wrap { trim: true });
+
+            let par2 = Paragraph::new(text2)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL - Borders::LEFT)
+                        .title(Span::styled(
+                            format!("{} ", selected.data.players),
+                            Style::default().add_modifier(Modifier::BOLD).fg(
+                                if selected.data.players > 0 {
+                                    Color::Green
+                                } else {
+                                    Color::Red
+                                },
+                            ),
+                        ))
+                        .title_alignment(Alignment::Left),
+                )
+                .alignment(Alignment::Left)
+                .wrap(Wrap { trim: true });
+
+            f.render_widget(par1, chunks[0]);
+            f.render_widget(par2, chunks[1]);
+        }
+
         drop(servers);
-        //let mut servers = app.servers.write();
 
         f.render_stateful_widget(table, chunks[0], &mut self.state.state);
 
@@ -214,17 +184,17 @@ impl Drawable for ServerView {
 
 impl AppView for ServerView {
     fn view_type(&self) -> ViewType {
-        ViewType::Server
+        ViewType::Servers
     }
 
     fn on_input(&mut self, input: &UserInput, app: &AppState) -> ActionResult {
         match input {
             UserInput::Up => {
-                self.state.previous(app.servers.read().len());
+                self.state.previous(app.servers.servers.read().len());
                 ActionResult::Stop
             }
             UserInput::Down => {
-                self.state.next(app.servers.read().len());
+                self.state.next(app.servers.servers.read().len());
                 ActionResult::Stop
             }
             UserInput::Back => {

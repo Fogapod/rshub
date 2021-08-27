@@ -3,84 +3,19 @@ use std::io;
 use tui::layout::Rect;
 
 use tui::{
-    backend::{Backend, CrosstermBackend},
+    backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
-    symbols,
     symbols::DOT,
     text::{Span, Spans, Text},
-    widgets::{
-        canvas::{Canvas, Line, Map, MapResolution, Rectangle},
-        BorderType, ListState,
-    },
-    widgets::{
-        Axis, BarChart, Block, Borders, Cell, Chart, Clear, Dataset, Gauge, LineGauge, List,
-        ListItem, Paragraph, Row, Sparkline, Table, Tabs, Wrap,
-    },
+    widgets::BorderType,
+    widgets::{Block, Paragraph, Tabs, Wrap},
     Frame,
 };
 
-use crate::app::{ActionResult, AppState, AppView, Drawable, ViewType};
 use crate::input::UserInput;
-
-pub struct StatefulList<T> {
-    pub state: ListState,
-    pub items: Vec<T>,
-}
-
-impl<T> StatefulList<T> {
-    pub fn new() -> Self {
-        Self {
-            state: ListState::default(),
-            items: Vec::new(),
-        }
-    }
-
-    pub fn with_items(items: Vec<T>) -> Self {
-        Self {
-            state: ListState::default(),
-            items,
-        }
-    }
-
-    pub fn next(&mut self) {
-        if self.items.is_empty() {
-            self.state.select(None);
-        } else {
-            match self.selected() {
-                None => self.state.select(Some(0)),
-                Some(i) => {
-                    if i < self.items.len() - 1 {
-                        self.state.select(Some(i + 1))
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn previous(&mut self) {
-        if self.items.is_empty() {
-            self.state.select(None);
-        } else {
-            match self.state.selected() {
-                None => self.state.select(Some(0)),
-                Some(i) => {
-                    if i != 0 {
-                        self.state.select(Some(i - 1))
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn unselect(&mut self) {
-        self.state.select(None);
-    }
-
-    pub fn selected(&self) -> Option<usize> {
-        self.state.selected()
-    }
-}
+use crate::states::AppState;
+use crate::views::{ActionResult, AppView, Drawable, StatefulList, ViewType};
 
 enum Tab {
     Servers,
@@ -94,12 +29,12 @@ impl Tab {
             Self::Servers => {
                 let servers = &app.servers;
 
-                format!("servers [{}]", servers.read().len())
+                format!("servers [{}]", servers.servers.read().len())
             }
             Self::Installations => {
                 let servers = &app.servers;
 
-                format!("installations [{}]", servers.read().len())
+                format!("installations [{}]", servers.servers.read().len())
             }
             Self::Commits => "commits".to_owned(),
         }
@@ -119,17 +54,27 @@ impl TabView {
         let mut state = StatefulList::with_items(Tab::all());
 
         // select first item
-        state.next();
+        state.next(false);
 
         Self { state }
     }
 
     fn index_to_view(&self) -> ViewType {
         match self.state.selected() {
-            Some(0) => ViewType::Server,
+            Some(0) => ViewType::Servers,
             Some(1) => ViewType::Installations,
             Some(2) => ViewType::Commits,
-            _ => ViewType::Server,
+            _ => ViewType::Servers,
+        }
+    }
+
+    const fn view_to_index(view: ViewType) -> usize {
+        match view {
+            ViewType::Servers => 0,
+            ViewType::Installations => 1,
+            ViewType::Commits => 2,
+            // TODO: REMOVE THIS!!! SEPARATE ENUM FOR TABS OR SOMETHING ELSE
+            _ => 0,
         }
     }
 }
@@ -141,12 +86,28 @@ impl AppView for TabView {
 
     fn on_input(&mut self, input: &UserInput, _: &AppState) -> ActionResult {
         match input {
-            UserInput::Left => {
-                self.state.previous();
+            UserInput::Char('q') => ActionResult::Exit,
+            // Servers
+            UserInput::Char('s') => {
+                self.state
+                    .select_index(Self::view_to_index(ViewType::Servers));
                 ActionResult::ReplaceView(self.index_to_view())
             }
-            UserInput::Right => {
-                self.state.next();
+            // Installations
+            UserInput::Char('i') => {
+                self.state
+                    .select_index(Self::view_to_index(ViewType::Installations));
+                ActionResult::ReplaceView(self.index_to_view())
+            }
+            // Commits
+            UserInput::Char('c') => {
+                self.state
+                    .select_index(Self::view_to_index(ViewType::Commits));
+                ActionResult::ReplaceView(self.index_to_view())
+            }
+
+            UserInput::Tab => {
+                self.state.next(true);
                 ActionResult::ReplaceView(self.index_to_view())
             }
             _ => ActionResult::Continue,
@@ -159,7 +120,7 @@ impl Drawable for TabView {
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
         area: Rect,
-        app: &mut AppState,
+        app: &AppState,
     ) -> Option<Rect> {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -174,6 +135,7 @@ impl Drawable for TabView {
 
         let paragraph = Paragraph::new(Text::from(format!(
             // NOTE: space at the end to prevent italic text go off screen
+            // normal space is getting trimmed, so have to use this weird one
             "{}-{}\u{00a0}",
             env!("CARGO_PKG_NAME"),
             env!("CARGO_PKG_VERSION")

@@ -1,33 +1,55 @@
-use crate::app::{AppState, AppView, Drawable, ViewType};
 use std::io;
 use tui::{
-    backend::{Backend, CrosstermBackend},
+    backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    symbols,
-    symbols::DOT,
-    text::{Span, Spans, Text},
-    widgets::{
-        canvas::{Canvas, Line, Map, MapResolution, Rectangle},
-        BorderType,
-    },
-    widgets::{
-        Axis, BarChart, Block, Borders, Cell, Chart, Clear, Dataset, Gauge, LineGauge, List,
-        ListItem, Paragraph, Row, Sparkline, Table, Tabs, Wrap,
-    },
+    style::{Color, Style},
+    text::Text,
+    widgets::{Block, Borders, Paragraph, Row, Table, Wrap},
     Frame,
 };
-pub struct CommitView {}
+
+use crate::datatypes::commit::Commit;
+use crate::input::UserInput;
+use crate::states::AppState;
+use crate::views::{ActionResult, AppView, Drawable, StatelessList, ViewType};
+
+pub struct CommitView {
+    // FIXME: dynamic commits somehow
+    loaded: bool,
+
+    state: StatelessList,
+}
 
 impl CommitView {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            loaded: false,
+            state: StatelessList::new(),
+        }
     }
 }
 
 impl AppView for CommitView {
     fn view_type(&self) -> ViewType {
         ViewType::Commits
+    }
+
+    fn on_input(&mut self, input: &UserInput, app: &AppState) -> ActionResult {
+        match input {
+            UserInput::Up => {
+                self.state.previous(app.commits.commits.read().len());
+                ActionResult::Stop
+            }
+            UserInput::Down => {
+                self.state.next(app.commits.commits.read().len());
+                ActionResult::Stop
+            }
+            UserInput::Back => {
+                self.state.unselect();
+                ActionResult::Stop
+            }
+            _ => ActionResult::Continue,
+        }
     }
 }
 
@@ -36,50 +58,54 @@ impl Drawable for CommitView {
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
         area: Rect,
-        _: &mut AppState,
+        app: &AppState,
     ) -> Option<Rect> {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
             .split(area);
-        let colors = [
-            Color::Reset,
-            Color::Black,
-            Color::Red,
-            Color::Green,
-            Color::Yellow,
-            Color::Blue,
-            Color::Magenta,
-            Color::Cyan,
-            Color::Gray,
-            Color::DarkGray,
-            Color::LightRed,
-            Color::LightGreen,
-            Color::LightYellow,
-            Color::LightBlue,
-            Color::LightMagenta,
-            Color::LightCyan,
-            Color::White,
-        ];
-        let items: Vec<Row> = colors
-            .iter()
-            .map(|c| {
-                let cells = vec![
-                    Cell::from(Span::raw(format!("{:?}: ", c))),
-                    Cell::from(Span::styled("Foreground", Style::default().fg(*c))),
-                    Cell::from(Span::styled("Background", Style::default().bg(*c))),
-                ];
-                Row::new(cells)
-            })
-            .collect();
-        let table = Table::new(items)
-            .block(Block::default().title("Colors").borders(Borders::ALL))
-            .widths(&[
-                Constraint::Ratio(1, 3),
-                Constraint::Ratio(1, 3),
-                Constraint::Ratio(1, 3),
-            ]);
-        f.render_widget(table, chunks[0]);
+
+        let commits = app.commits.commits.read();
+
+        let items = commits.values().map(|c| Row::new(vec![c.sha.clone()]));
+
+        let list = Table::new(items)
+            .block(Block::default().borders(Borders::ALL).title("hashes"))
+            .widths(&[Constraint::Percentage(100)])
+            .highlight_style(Style::default().bg(Color::DarkGray));
+
+        f.render_stateful_widget(list, chunks[0], &mut self.state.state);
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(0)])
+            .split(chunks[1]);
+
+        let selected: Option<Commit> = None;
+
+        let text = if let Some(selected) = selected {
+            Text::from(format!("author: {}", selected.author.name))
+        } else {
+            Text::from(format!("author: {}", "Doobly"))
+        };
+
+        let par = Paragraph::new(text)
+            .alignment(Alignment::Left)
+            .block(Block::default().borders(Borders::ALL).title("author"))
+            .wrap(Wrap { trim: true });
+
+        f.render_widget(par, chunks[0]);
+        f.render_widget(
+            Block::default().borders(Borders::ALL).title("info"),
+            chunks[1],
+        );
+
+        drop(commits);
+
+        if !self.loaded {
+            app.commits.load();
+            self.loaded = true;
+        }
 
         None
     }
