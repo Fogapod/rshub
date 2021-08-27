@@ -56,8 +56,8 @@ impl Drawable for ServerView {
 
         let chunks = Layout::default()
             .constraints([
-                Constraint::Percentage(if selected_server.is_some() { 66 } else { 100 }),
-                Constraint::Percentage(if selected_server.is_some() { 33 } else { 0 }),
+                Constraint::Min(0),
+                Constraint::Length(if selected_server.is_some() { 5 } else { 0 }),
             ])
             .direction(Direction::Vertical)
             .split(area);
@@ -118,16 +118,20 @@ impl Drawable for ServerView {
                 .split(chunks[1]);
 
             let text1 = Text::from(format!(
-                r#"map:   {} ({})
-                   build: {}
-                   fork:  {}"#,
-                selected.data.map, selected.data.gamemode, selected.data.build, selected.data.fork
+                r#"version: {} {}
+                   map:     {} ({})
+                   address: {}:{}"#,
+                selected.data.fork,
+                selected.data.build,
+                selected.data.map,
+                selected.data.gamemode,
+                selected.data.ip,
+                selected.data.port,
             ));
             let text2 = Text::from(format!(
-                r#"fps:     {}
-                   time:    {}
-                   address: {}:{}"#,
-                selected.data.fps, selected.data.time, selected.data.ip, selected.data.port
+                r#"fps:  {}
+                   time: {}"#,
+                selected.data.fps, selected.data.time
             ));
 
             let par1 = Paragraph::new(text1)
