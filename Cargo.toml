@@ -2,9 +2,13 @@ cargo-features = ["strip"]
 
 [package]
 name = "rstationhub"
-description = "Unofficial game launcher for UnityStation"
 version = "0.1.0"
 edition = "2018"
+description = "Unofficial game launcher for UnityStation"
+homepage = "https://github.com/Fogapod/rstationhub"
+repository = "https://github.com/Fogapod/rstationhub"
+license = "MIT"
+
 
 [features]
 default = ["rustls", "geolocation"]
