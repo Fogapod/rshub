@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-
 use std::io;
 
 use tui::layout::Rect;
@@ -7,10 +6,11 @@ use tui::layout::Rect;
 use tui::backend::CrosstermBackend;
 use tui::terminal::Frame;
 
+use crate::app::AppAction;
 use crate::datatypes::server::Server;
 use crate::input::UserInput;
 use crate::states::{AppState, StatelessList};
-use crate::views::{ActionResult, Drawable, InputProcessor};
+use crate::views::{Drawable, InputProcessor};
 
 use tui::{
     layout::{Alignment, Constraint, Direction, Layout},
@@ -33,7 +33,7 @@ impl ServerView {
 }
 
 impl InputProcessor for ServerView {
-    fn on_input(&mut self, input: &UserInput, app: &AppState) -> ActionResult {
+    fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
         self.state.on_input(input, app.servers.count())
     }
 }
@@ -47,9 +47,16 @@ impl Drawable for ServerView {
         let mut servers_to_be_sorted = servers.values().collect::<Vec<&Server>>();
         // TODO: custom sorts by each field
         // TODO: search by pattern
+        // sorting priorities:
+        //  - server is online
+        //  - player count
+        //  - server name
         // https://stackoverflow.com/a/40369685
-        servers_to_be_sorted.sort_by(|a, b| match a.data.players.cmp(&b.data.players).reverse() {
-            Ordering::Equal => a.data.name.cmp(&b.data.name),
+        servers_to_be_sorted.sort_by(|a, b| match a.offline.cmp(&b.offline) {
+            Ordering::Equal => match a.data.players.cmp(&b.data.players).reverse() {
+                Ordering::Equal => a.data.name.cmp(&b.data.name),
+                other => other,
+            },
             other => other,
         });
 
@@ -69,7 +76,7 @@ impl Drawable for ServerView {
                     .fg(Color::Red)
                     .add_modifier(Modifier::RAPID_BLINK | Modifier::CROSSED_OUT)
             } else if s.data.players == 0 {
-                Style::default().fg(Color::Red)
+                Style::default().fg(Color::Yellow)
             } else {
                 Style::default().fg(Color::Green)
             };
@@ -112,11 +119,18 @@ impl Drawable for ServerView {
                     .add_modifier(Modifier::BOLD),
             );
 
+        // draw server info
         if let Some(selected) = selected_server {
             let chunks = Layout::default()
                 .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
                 .direction(Direction::Horizontal)
                 .split(chunks[1]);
+
+            let border_style = Style::default().fg(if selected.offline {
+                Color::Red
+            } else {
+                Color::White
+            });
 
             let text1 = Text::from(format!(
                 r#"version: {} {}
@@ -139,6 +153,7 @@ impl Drawable for ServerView {
                 .block(
                     Block::default()
                         .borders(Borders::ALL - Borders::RIGHT)
+                        .border_style(border_style)
                         .title(Spans::from(vec![
                             Span::styled(
                                 format!(" {}", selected.data.name),
@@ -160,6 +175,7 @@ impl Drawable for ServerView {
                 .block(
                     Block::default()
                         .borders(Borders::ALL - Borders::LEFT)
+                        .border_style(border_style)
                         .title(Span::styled(
                             format!("{} ", selected.data.players),
                             Style::default().add_modifier(Modifier::BOLD).fg(

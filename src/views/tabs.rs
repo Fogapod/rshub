@@ -15,7 +15,7 @@ use tui::{
     Frame,
 };
 
-use crate::app::ActionResult;
+use crate::app::AppAction;
 use crate::geolocation::IP;
 use crate::input::UserInput;
 use crate::states::{AppState, StatelessList};
@@ -24,6 +24,7 @@ use crate::views::{
     InputProcessor,
 };
 
+#[derive(Copy, Clone)]
 enum Tab {
     Servers,
     Installations,
@@ -96,14 +97,9 @@ impl TabView {
     }
 
     fn selected_tab(&self) -> Tab {
-        match self.state.selected() {
-            Some(0) => Tab::Servers,
-            Some(1) => Tab::Installations,
-            Some(2) => Tab::Commits,
-            Some(3) => Tab::Map,
-            // not possible
-            _ => Tab::Servers,
-        }
+        *Tab::all()
+            .get(self.state.selected().unwrap_or_default())
+            .unwrap_or(&Tab::Servers)
     }
 
     fn select_tab(&mut self, tab: Tab) {
@@ -112,28 +108,28 @@ impl TabView {
 }
 
 impl InputProcessor for TabView {
-    fn on_input(&mut self, input: &UserInput, app: &AppState) -> ActionResult {
+    fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
         match input {
-            UserInput::Char('q') => ActionResult::Exit,
-            UserInput::Char('s') => {
+            UserInput::Char('q' | 'Q') => Some(AppAction::Exit),
+            UserInput::Char('s' | 'S') => {
                 self.select_tab(Tab::Servers);
-                ActionResult::Continue
+                None
             }
-            UserInput::Char('i') => {
+            UserInput::Char('i' | 'I') => {
                 self.select_tab(Tab::Installations);
-                ActionResult::Continue
+                None
             }
-            UserInput::Char('c') => {
+            UserInput::Char('c' | 'C') => {
                 self.select_tab(Tab::Commits);
-                ActionResult::Continue
+                None
             }
-            UserInput::Char('m') => {
+            UserInput::Char('m' | 'M') => {
                 self.select_tab(Tab::Map);
-                ActionResult::Continue
+                None
             }
             UserInput::Tab => {
                 self.state.select_next(Tab::tab_count());
-                ActionResult::Continue
+                None
             }
             // cannot move this to function because of match limitation for arms
             // even if they implement same trait
@@ -141,7 +137,7 @@ impl InputProcessor for TabView {
                 Tab::Servers => self.view_servers.on_input(input, app),
                 Tab::Installations => self.view_installations.on_input(input, app),
                 Tab::Commits => self.view_commits.on_input(input, app),
-                Tab::Map => ActionResult::Continue,
+                Tab::Map => None,
             },
         }
     }

@@ -7,7 +7,7 @@ use tui::{
     Frame,
 };
 
-use crate::app::ActionResult;
+use crate::app::AppAction;
 
 use crate::input::UserInput;
 use crate::states::{AppState, StatelessList};
@@ -26,7 +26,7 @@ impl InstallationView {
 }
 
 impl InputProcessor for InstallationView {
-    fn on_input(&mut self, input: &UserInput, app: &AppState) -> ActionResult {
+    fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
         self.state.on_input(input, app.commits.count())
     }
 }

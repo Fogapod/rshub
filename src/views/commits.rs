@@ -8,9 +8,10 @@ use tui::{
     Frame,
 };
 
+use crate::app::AppAction;
 use crate::input::UserInput;
 use crate::states::{AppState, StatelessList};
-use crate::views::{ActionResult, Drawable, InputProcessor};
+use crate::views::{Drawable, InputProcessor};
 
 pub struct CommitView {
     // FIXME: dynamic commits somehow
@@ -29,7 +30,7 @@ impl CommitView {
 }
 
 impl InputProcessor for CommitView {
-    fn on_input(&mut self, input: &UserInput, app: &AppState) -> ActionResult {
+    fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
         self.state.on_input(input, app.commits.count())
     }
 }

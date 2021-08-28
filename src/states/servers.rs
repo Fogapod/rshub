@@ -32,11 +32,32 @@ impl Default for ServersState {
     }
 }
 
+const DEBUG_GOOGOL_IP: &str = "8.8.8.8";
+
 impl ServersState {
     pub fn new() -> Self {
-        Self {
-            items: RwLock::new(HashMap::new()),
-        }
+        let items = RwLock::new(HashMap::new());
+
+        items.write().insert(
+            DEBUG_GOOGOL_IP.to_owned(),
+            Server {
+                offline: true,
+                data: crate::datatypes::server::ServerData {
+                    build: 0,
+                    download: "none".to_owned(),
+                    fork: "origin".to_owned(),
+                    fps: 42,
+                    time: "13:37".to_owned(),
+                    gamemode: "FFA".to_owned(),
+                    players: 7,
+                    map: "world".to_owned(),
+                    ip: DEBUG_GOOGOL_IP.to_owned(),
+                    name: "googol".to_owned(),
+                    port: 22,
+                },
+            },
+        );
+        Self { items }
     }
 
     pub fn count(&self) -> usize {
@@ -90,6 +111,11 @@ impl ServersState {
                 if let Err(e) = app.locations.resolve(IP::Local) {
                     log::error!("error fetching local ip: {}", e);
                 }
+
+                // debugging
+                let _ = app
+                    .locations
+                    .resolve(IP::Remote(DEBUG_GOOGOL_IP.to_owned()));
 
                 let loop_body = move || {
                     let req = match client.get(SERVER_LIST_URL).send() {

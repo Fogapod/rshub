@@ -15,15 +15,13 @@ use crate::views::{tabs::TabView, AppView, ViewType};
 
 use crate::waitable_mutex::WaitableMutex;
 
-pub enum ActionResult {
-    Continue,
-    Stop,
+pub enum AppAction {
+    Accepted,
     Exit,
 }
 
 pub struct App {
     views: HashMap<ViewType, Box<dyn AppView>>,
-
     view_stack: Vec<ViewType>,
 
     pub state: Arc<AppState>,
@@ -71,7 +69,7 @@ impl App {
         let input = match event {
             Event::Key(key) => match key {
                 KeyEvent {
-                    code: KeyCode::Char('c'),
+                    code: KeyCode::Char('c' | 'C'),
                     modifiers: KeyModifiers::CONTROL,
                 } => {
                     self.stop();
@@ -125,26 +123,19 @@ impl App {
         };
 
         if let Some(input) = input {
-            let mut actions = Vec::new();
-
             for tp in self.view_stack.iter_mut().rev() {
                 if let Some(widget) = self.views.get_mut(tp) {
-                    match widget.on_input(&input, &self.state) {
-                        ActionResult::Stop => {
-                            break;
+                    if let Some(action) = widget.on_input(&input, &self.state) {
+                        match action {
+                            AppAction::Accepted => {
+                                break;
+                            }
+                            AppAction::Exit => {
+                                self.stop();
+                                break;
+                            }
                         }
-                        ActionResult::Exit => {
-                            actions.push(ActionResult::Exit);
-                            break;
-                        }
-                        result => actions.push(result),
                     }
-                }
-            }
-
-            for action in actions {
-                if let ActionResult::Exit = action {
-                    self.stop()
                 }
             }
         }

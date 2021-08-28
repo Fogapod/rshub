@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use tui::widgets::{ListState, TableState};
 
-use crate::app::ActionResult;
+use crate::app::AppAction;
 use crate::input::UserInput;
 
 pub type SharedAppState = Arc<AppState>;
@@ -122,29 +122,29 @@ impl<T: TuiState> StatelessList<T> {
         self.state.selected()
     }
 
-    pub fn on_input(&mut self, input: &UserInput, item_count: usize) -> ActionResult {
+    pub fn on_input(&mut self, input: &UserInput, item_count: usize) -> Option<AppAction> {
         match input {
             UserInput::Up => {
                 self.select_previous(item_count);
-                ActionResult::Stop
+                Some(AppAction::Accepted)
             }
             UserInput::Down => {
                 self.select_next(item_count);
-                ActionResult::Stop
+                Some(AppAction::Accepted)
             }
             UserInput::Back => {
                 self.unselect();
-                ActionResult::Stop
+                Some(AppAction::Accepted)
             }
             UserInput::Top => {
                 self.select_first(item_count);
-                ActionResult::Stop
+                Some(AppAction::Accepted)
             }
             UserInput::Bottom => {
                 self.select_last(item_count);
-                ActionResult::Stop
+                Some(AppAction::Accepted)
             }
-            _ => ActionResult::Continue,
+            _ => None,
         }
     }
 }

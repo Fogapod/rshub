@@ -9,7 +9,7 @@ use tui::backend::CrosstermBackend;
 use tui::layout::Rect;
 use tui::terminal::Frame;
 
-use crate::app::ActionResult;
+use crate::app::AppAction;
 use crate::input::UserInput;
 use crate::states::AppState;
 
@@ -23,8 +23,8 @@ pub trait Drawable {
 }
 
 pub trait InputProcessor {
-    fn on_input(&mut self, _: &UserInput, _: &AppState) -> ActionResult {
-        ActionResult::Continue
+    fn on_input(&mut self, _: &UserInput, _: &AppState) -> Option<AppAction> {
+        None
     }
 }
 
