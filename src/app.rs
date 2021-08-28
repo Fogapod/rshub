@@ -1,6 +1,4 @@
 use std::io;
-
-use std::time::Duration;
 use std::{collections::HashMap, sync::Arc};
 
 use tui::backend::CrosstermBackend;
@@ -8,11 +6,10 @@ use tui::terminal::Frame;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEventKind};
 
+use crate::config::AppConfig;
 use crate::input::UserInput;
-use crate::states::{AppState, ServersState};
-
+use crate::states::AppState;
 use crate::views::{tabs::TabView, AppView, ViewType};
-
 use crate::waitable_mutex::WaitableMutex;
 
 pub enum AppAction {
@@ -30,9 +27,9 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(config: AppConfig) -> Self {
         let mut instance = Self {
-            state: Arc::new(AppState::new()),
+            state: Arc::new(AppState::new(config)),
             views: HashMap::new(),
 
             view_stack: vec![ViewType::Tab],
@@ -50,9 +47,9 @@ impl App {
     }
 
     pub fn spawn_threads(&self) -> Vec<std::thread::JoinHandle<()>> {
-        vec![ServersState::spawn_server_fetch_thread(
-            Duration::from_secs(20),
-            self.state.clone(),
+        vec![self.state.servers.spawn_server_fetch_thread(
+            self.state.locations.clone(),
+            self.state.servers.clone(),
             self.stop_lock.clone(),
         )]
     }

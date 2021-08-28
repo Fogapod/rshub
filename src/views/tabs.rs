@@ -8,7 +8,7 @@ use tui::{
     style::{Color, Modifier, Style},
     symbols,
     symbols::DOT,
-    text::{Span, Spans, Text},
+    text::{Spans, Text},
     widgets::canvas::{Canvas, Line, Map, MapResolution},
     widgets::BorderType,
     widgets::{Block, Borders, ListState, Paragraph, Tabs, Wrap},
@@ -177,7 +177,7 @@ impl Drawable for TabView {
 
         let titles = Tab::all()
             .iter()
-            .map(|t| Spans::from(Span::styled(t.name(app), Style::default().fg(Color::Green))))
+            .map(|t| Spans::from(t.name(app)))
             .collect();
 
         let selected = self.state.selected().unwrap_or(0);

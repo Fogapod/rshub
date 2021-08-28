@@ -66,8 +66,6 @@ impl CommitState {
     }
 
     pub fn update(&self, data: CommitRange) -> Result<(), Box<dyn std::error::Error>> {
-        log::info!("{:#?}", &data);
-
         let mut commits = self.items.write();
 
         commits.append(&mut data.0.iter().map(Commit::from).collect());

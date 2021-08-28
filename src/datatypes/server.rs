@@ -23,7 +23,7 @@ where
 {
     let s: String = deserialize_ok_or_default(deserializer)?;
 
-    Ok(s.replace('\n', ""))
+    Ok(s.replace('\n', " "))
 }
 
 #[derive(Debug, Clone, Deserialize, Hash)]

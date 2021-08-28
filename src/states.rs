@@ -10,18 +10,10 @@ pub use installations::InstallationsState;
 pub use locations::LocationsState;
 pub use servers::ServersState;
 
-use std::sync::Arc;
-
 use tui::widgets::{ListState, TableState};
 
 use crate::app::AppAction;
 use crate::input::UserInput;
-
-pub type SharedAppState = Arc<AppState>;
-// pub type SharedCommitState = Arc<CommitState>;
-// pub type SharedInstallationsState = Arc<InstallationsState>;
-pub type SharedLocationsState = Arc<LocationsState>;
-// pub type SharedServersState = Arc<ServersState>;
 
 // tui states look same, but do not implement trait, so I made one
 pub trait TuiState {

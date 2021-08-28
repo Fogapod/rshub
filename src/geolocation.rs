@@ -1,7 +1,5 @@
 use serde::Deserialize;
 
-const LOCATION_API_URL: &str = "https://ifconfig.based.computer/json";
-
 #[derive(Hash, PartialEq, Eq, Debug)]
 pub enum IP {
     Local,
@@ -18,8 +16,9 @@ impl IP {
     pub fn fetch(
         &self,
         client: &reqwest::blocking::Client,
+        url: &str,
     ) -> Result<Location, Box<dyn std::error::Error>> {
-        let mut request = client.get(LOCATION_API_URL);
+        let mut request = client.get(format!("{}/json", url));
 
         if let Self::Remote(ref ip) = self {
             request = request.query(&[("ip", ip)])

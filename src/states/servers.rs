@@ -1,14 +1,15 @@
 use std::collections::HashMap;
-
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
 use parking_lot::RwLock;
 
+use crate::config::AppConfig;
 use crate::constants::USER_AGENT;
 use crate::datatypes::server::{Server, ServerListData};
 use crate::geolocation::IP;
-use crate::states::{SharedAppState, SharedLocationsState};
+use crate::states::LocationsState;
 use crate::waitable_mutex::SharedWaitableMutex;
 
 const SERVER_LIST_URL: &str = "https://api.unitystation.org/serverlist";
@@ -24,18 +25,13 @@ const SERVER_LIST_URL: &str = "https://api.unitystation.org/serverlist";
 
 pub struct ServersState {
     pub items: RwLock<HashMap<String, Server>>,
-}
-
-impl Default for ServersState {
-    fn default() -> Self {
-        Self::new()
-    }
+    update_interval: Duration,
 }
 
 const DEBUG_GOOGOL_IP: &str = "8.8.8.8";
 
 impl ServersState {
-    pub fn new() -> Self {
+    pub fn new(config: &AppConfig) -> Self {
         let items = RwLock::new(HashMap::new());
 
         items.write().insert(
@@ -57,7 +53,10 @@ impl ServersState {
                 },
             },
         );
-        Self { items }
+        Self {
+            items,
+            update_interval: Duration::from_secs(config.args.update_interval),
+        }
     }
 
     pub fn count(&self) -> usize {
@@ -67,7 +66,7 @@ impl ServersState {
     pub fn update(
         &self,
         data: ServerListData,
-        locations: SharedLocationsState,
+        locations: Arc<LocationsState>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut servers = self.items.write();
         let mut existing = servers.clone();
@@ -96,10 +95,13 @@ impl ServersState {
     }
 
     pub fn spawn_server_fetch_thread(
-        interval: Duration,
-        app: SharedAppState,
+        &self,
+        locations: Arc<LocationsState>,
+        servers: Arc<ServersState>,
         stop_lock: SharedWaitableMutex<bool>,
     ) -> thread::JoinHandle<()> {
+        let interval = self.update_interval;
+
         thread::Builder::new()
             .name("server_fetch".to_owned())
             .spawn(move || {
@@ -108,14 +110,12 @@ impl ServersState {
                     .build()
                     .expect("creating client");
 
-                if let Err(e) = app.locations.resolve(IP::Local) {
+                if let Err(e) = locations.resolve(IP::Local) {
                     log::error!("error fetching local ip: {}", e);
                 }
 
                 // debugging
-                let _ = app
-                    .locations
-                    .resolve(IP::Remote(DEBUG_GOOGOL_IP.to_owned()));
+                let _ = locations.resolve(IP::Remote(DEBUG_GOOGOL_IP.to_owned()));
 
                 let loop_body = move || {
                     let req = match client.get(SERVER_LIST_URL).send() {
@@ -139,7 +139,7 @@ impl ServersState {
                             return;
                         }
                     };
-                    if let Err(e) = app.servers.update(resp, app.locations.clone()) {
+                    if let Err(e) = servers.update(resp, locations.clone()) {
                         log::error!("error updating servers: {}", e);
                     }
                 };

@@ -1,4 +1,5 @@
 mod app;
+mod config;
 mod constants;
 mod datatypes;
 mod geolocation;
@@ -7,12 +8,10 @@ mod states;
 mod views;
 mod waitable_mutex;
 
-use std::{env, io, sync::mpsc};
+use std::io;
+use std::time::Duration;
 
-use tui::{
-    backend::{Backend, CrosstermBackend},
-    Terminal,
-};
+use tui::{backend::CrosstermBackend, Terminal};
 
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
@@ -22,17 +21,20 @@ use crossterm::{
 
 use log::LevelFilter;
 
+use crate::config::AppConfig;
 use crate::input::{spawn_input_thread, EventOrTick};
 
 fn setup_panic_hook() {
     std::panic::set_hook(Box::new(|panic_info| {
         // cannot show cursor without terminal instance
-        cleanup_terminal::<CrosstermBackend<io::Stdout>>(None);
+        cleanup_terminal(None);
+
+        #[cfg(debug_assertions)]
         better_panic::Settings::auto().create_panic_handler()(panic_info);
     }));
 }
 
-fn cleanup_terminal<B: Backend>(terminal: Option<&mut Terminal<B>>) {
+fn cleanup_terminal(terminal: Option<&mut Terminal<CrosstermBackend<io::Stdout>>>) {
     let mut stdout = io::stdout();
 
     disable_raw_mode().unwrap();
@@ -43,26 +45,42 @@ fn cleanup_terminal<B: Backend>(terminal: Option<&mut Terminal<B>>) {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    better_panic::install();
+const fn verbosity_to_log_level(verbosity: u32) -> LevelFilter {
+    let mut verbosity = verbosity;
 
-    // TODO: temp file, platform specific
-    // TODO: configure level
-    simple_logging::log_to_file("test.log", LevelFilter::Debug).unwrap();
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        let data_dir =
-            { env::var("XDG_DATA_HOME").unwrap_or_else(|_| "~/.local/share".to_string()) };
-
-        log::debug!("data dir: {}", data_dir);
+    if cfg!(debug_assertions) {
+        // jump straight to debug
+        verbosity += 3;
     }
 
-    let mut app = app::App::new();
+    match verbosity {
+        0 => LevelFilter::Error,
+        1 => LevelFilter::Warn,
+        2 => LevelFilter::Info,
+        3 => LevelFilter::Debug,
+        _ => LevelFilter::Trace,
+    }
+}
+fn setup_logger(config: &AppConfig) -> Result<(), io::Error> {
+    simple_logging::log_to_file(
+        config.args.log_file.clone().unwrap_or_else(|| {
+            config
+                .data_dir
+                // TODO: rotate by count or date or something
+                .join(format!("{}.log", env!("CARGO_PKG_NAME")))
+        }),
+        verbosity_to_log_level(config.args.verbose),
+    )
+}
+
+fn _main() -> Result<(), Box<dyn std::error::Error>> {
+    let config: AppConfig = AppConfig::new()?;
+
+    setup_logger(&config)?;
+
+    let mut app = app::App::new(config);
 
     let handles = app.spawn_threads();
-
-    setup_panic_hook();
 
     let mut terminal = {
         enable_raw_mode()?;
@@ -75,8 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Terminal::new(backend)?
     };
 
-    let (tx, rx) = mpsc::channel();
-    spawn_input_thread(250, tx);
+    let rx = spawn_input_thread(Duration::from_millis(200));
 
     loop {
         // TODO: only draw when something changed
@@ -100,6 +117,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     cleanup_terminal(Some(&mut terminal));
+
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(debug_assertions)]
+    better_panic::install();
+
+    setup_panic_hook();
+
+    // TODO: actual error processing
+    _main()?;
 
     Ok(())
 }
