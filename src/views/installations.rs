@@ -20,7 +20,7 @@ pub struct InstallationView {
 impl InstallationView {
     pub fn new() -> Self {
         Self {
-            state: StatelessList::new(ListState::default()),
+            state: StatelessList::new(ListState::default(), false),
         }
     }
 }

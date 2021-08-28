@@ -23,78 +23,6 @@ pub type SharedAppState = Arc<AppState>;
 pub type SharedLocationsState = Arc<LocationsState>;
 // pub type SharedServersState = Arc<ServersState>;
 
-// TODO: remove this probably
-pub struct StatefulList<T> {
-    state: ListState,
-    pub items: Vec<T>,
-}
-
-impl<T> StatefulList<T> {
-    pub fn new() -> Self {
-        Self {
-            state: ListState::default(),
-            items: Vec::new(),
-        }
-    }
-
-    pub fn with_items(items: Vec<T>) -> Self {
-        Self {
-            state: ListState::default(),
-            items,
-        }
-    }
-
-    pub fn next(&mut self, looped: bool) {
-        if self.items.is_empty() {
-            self.state.select(None);
-        } else if let Some(i) = match self.state.selected() {
-            None => Some(0),
-            Some(i) => {
-                if i < self.items.len() - 1 {
-                    Some(i + 1)
-                } else if looped {
-                    Some(0)
-                } else {
-                    None
-                }
-            }
-        } {
-            self.state.select(Some(i))
-        }
-    }
-
-    pub fn previous(&mut self, looped: bool) {
-        if self.items.is_empty() {
-            self.state.select(None);
-        } else if let Some(i) = match self.state.selected() {
-            None => Some(0),
-            Some(i) => {
-                if i != 0 {
-                    Some(i - 1)
-                } else if looped {
-                    Some(self.items.len() - 1)
-                } else {
-                    None
-                }
-            }
-        } {
-            self.state.select(Some(i))
-        }
-    }
-
-    pub fn select_index(&mut self, index: usize) {
-        self.state.select(Some(index))
-    }
-
-    pub fn unselect(&mut self) {
-        self.state.select(None);
-    }
-
-    pub fn selected(&self) -> Option<usize> {
-        self.state.selected()
-    }
-}
-
 // tui states look same, but do not implement trait, so I made one
 pub trait TuiState {
     fn selected(&self) -> Option<usize>;
@@ -124,11 +52,12 @@ impl TuiState for TableState {
 // state compatible with both table and list
 pub struct StatelessList<T: TuiState> {
     pub state: T,
+    looped: bool,
 }
 
 impl<T: TuiState> StatelessList<T> {
-    pub fn new(state: T) -> Self {
-        Self { state }
+    pub fn new(state: T, looped: bool) -> Self {
+        Self { state, looped }
     }
 
     pub fn select_next(&mut self, item_count: usize) {
@@ -140,6 +69,8 @@ impl<T: TuiState> StatelessList<T> {
                 Some(i) => {
                     if i < item_count - 1 {
                         self.state.select(Some(i + 1))
+                    } else if self.looped {
+                        self.state.select(Some(0))
                     }
                 }
             }
@@ -155,6 +86,8 @@ impl<T: TuiState> StatelessList<T> {
                 Some(i) => {
                     if i != 0 {
                         self.state.select(Some(i - 1))
+                    } else if self.looped {
+                        self.state.select(Some(item_count - 1))
                     }
                 }
             }
@@ -175,6 +108,10 @@ impl<T: TuiState> StatelessList<T> {
         } else {
             self.state.select(Some(item_count - 1));
         }
+    }
+
+    pub fn select_index(&mut self, index: usize) {
+        self.state.select(Some(index))
     }
 
     pub fn unselect(&mut self) {

@@ -11,14 +11,14 @@ use tui::{
     text::{Span, Spans, Text},
     widgets::canvas::{Canvas, Line, Map, MapResolution},
     widgets::BorderType,
-    widgets::{Block, Borders, Paragraph, Tabs, Wrap},
+    widgets::{Block, Borders, ListState, Paragraph, Tabs, Wrap},
     Frame,
 };
 
 use crate::app::ActionResult;
 use crate::geolocation::IP;
 use crate::input::UserInput;
-use crate::states::{AppState, StatefulList};
+use crate::states::{AppState, StatelessList};
 use crate::views::{
     commits::CommitView, installations::InstallationView, servers::ServerView, AppView, Drawable,
     InputProcessor,
@@ -49,13 +49,17 @@ impl Tab {
         }
     }
 
-    fn all() -> Vec<Self> {
-        vec![
+    const fn all() -> [Self; 4] {
+        [
             Self::Servers {},
             Self::Installations {},
             Self::Commits {},
             Self::Map {},
         ]
+    }
+
+    const fn tab_count() -> usize {
+        Self::all().len()
     }
 }
 
@@ -71,7 +75,7 @@ impl From<Tab> for usize {
 }
 
 pub struct TabView {
-    state: StatefulList<Tab>,
+    state: StatelessList<ListState>,
     view_servers: ServerView,
     view_installations: InstallationView,
     view_commits: CommitView,
@@ -79,10 +83,9 @@ pub struct TabView {
 
 impl TabView {
     pub fn new() -> Self {
-        let mut state = StatefulList::with_items(Tab::all());
+        let mut state = StatelessList::new(ListState::default(), true);
 
-        // select first item
-        state.next(false);
+        state.select_first(Tab::tab_count());
 
         Self {
             state,
@@ -129,7 +132,7 @@ impl InputProcessor for TabView {
                 ActionResult::Continue
             }
             UserInput::Tab => {
-                self.state.next(true);
+                self.state.select_next(Tab::tab_count());
                 ActionResult::Continue
             }
             // cannot move this to function because of match limitation for arms
@@ -176,9 +179,7 @@ impl Drawable for TabView {
 
         f.render_widget(paragraph, header_chunks[1]);
 
-        let titles = self
-            .state
-            .items
+        let titles = Tab::all()
             .iter()
             .map(|t| Spans::from(Span::styled(t.name(app), Style::default().fg(Color::Green))))
             .collect();

@@ -27,7 +27,7 @@ pub struct ServerView {
 impl ServerView {
     pub fn new() -> Self {
         Self {
-            state: StatelessList::new(TableState::default()),
+            state: StatelessList::new(TableState::default(), false),
         }
     }
 }
