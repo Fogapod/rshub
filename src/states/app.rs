@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
-use crate::states::{CommitState, LocationsState, ServersState};
+use crate::states::{CommitState, InstallationsState, LocationsState, ServersState};
 
 pub struct AppState {
-    pub servers: Arc<ServersState>,
-    pub locations: Arc<LocationsState>,
     pub commits: Arc<CommitState>,
+    pub installations: Arc<InstallationsState>,
+    pub locations: Arc<LocationsState>,
+    pub servers: Arc<ServersState>,
 }
 
 impl Default for AppState {
@@ -17,9 +18,10 @@ impl Default for AppState {
 impl AppState {
     pub fn new() -> Self {
         Self {
-            servers: Arc::new(ServersState::new()),
-            locations: Arc::new(LocationsState::new()),
             commits: Arc::new(CommitState::new()),
+            installations: Arc::new(InstallationsState::new()),
+            locations: Arc::new(LocationsState::new()),
+            servers: Arc::new(ServersState::new()),
         }
     }
 }

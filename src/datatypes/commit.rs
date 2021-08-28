@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct CommitAuthor {
     pub name: String,
     pub date: String,
@@ -26,6 +26,7 @@ pub struct CommitRange(pub Vec<GitHubJunkCommit>);
 #[derive(Debug)]
 pub struct Commit {
     pub sha: String,
+    pub title: String,
     pub message: String,
     pub date: String,
     // pub added: usize,
@@ -33,13 +34,14 @@ pub struct Commit {
     pub author: CommitAuthor,
 }
 
-impl From<GitHubJunkCommit> for Commit {
-    fn from(commit: GitHubJunkCommit) -> Self {
+impl From<&GitHubJunkCommit> for Commit {
+    fn from(commit: &GitHubJunkCommit) -> Self {
         Self {
-            sha: commit.sha,
+            sha: commit.sha.to_owned(),
             date: commit.commit.author.date.clone(),
-            author: commit.commit.author,
-            message: commit.commit.message,
+            author: commit.commit.author.clone(),
+            title: commit.commit.message.lines().next().unwrap().to_owned(),
+            message: commit.commit.message.clone(),
         }
     }
 }

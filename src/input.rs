@@ -5,15 +5,17 @@ use std::thread;
 use crossterm::event::{self, Event};
 
 #[derive(Debug)]
-pub enum UserInput {
+pub enum UserInput<'a> {
     Up,
     Down,
     Left,
     Right,
+    Top,
+    Bottom,
     Back,
     Enter,
     Tab,
-    Char(char),
+    Char(&'a char),
 }
 
 pub(crate) enum EventOrTick<I> {

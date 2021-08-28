@@ -6,17 +6,20 @@ use std::{collections::HashMap, sync::Arc};
 use tui::backend::CrosstermBackend;
 use tui::terminal::Frame;
 
-use crossterm::event::{Event, KeyCode, MouseEventKind};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEventKind};
 
 use crate::input::UserInput;
 use crate::states::{AppState, ServersState};
 
-use crate::views::{
-    commits::CommitView, installations::InstallationView, servers::ServerView, tabs::TabView,
-    ActionResult, AppView, ViewType,
-};
+use crate::views::{tabs::TabView, AppView, ViewType};
 
 use crate::waitable_mutex::WaitableMutex;
+
+pub enum ActionResult {
+    Continue,
+    Stop,
+    Exit,
+}
 
 pub struct App {
     views: HashMap<ViewType, Box<dyn AppView>>,
@@ -34,21 +37,18 @@ impl App {
             state: Arc::new(AppState::new()),
             views: HashMap::new(),
 
-            view_stack: vec![ViewType::Tab, ViewType::Servers],
+            view_stack: vec![ViewType::Tab],
             stopped: false,
             stop_lock: Arc::new(WaitableMutex::new(false)),
         };
 
-        instance.register_view(Box::new(TabView::new()));
-        instance.register_view(Box::new(ServerView::new()));
-        instance.register_view(Box::new(InstallationView::new()));
-        instance.register_view(Box::new(CommitView::new()));
+        instance.register_view(ViewType::Tab, Box::new(TabView::new()));
 
         instance
     }
 
-    fn register_view(&mut self, view: Box<dyn AppView>) {
-        self.views.insert(view.view_type(), view);
+    fn register_view(&mut self, tp: ViewType, view: Box<dyn AppView>) {
+        self.views.insert(tp, view);
     }
 
     pub fn spawn_threads(&self) -> Vec<std::thread::JoinHandle<()>> {
@@ -60,33 +60,60 @@ impl App {
     }
 
     pub fn draw(&mut self, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
-        let mut area = f.size();
-
-        for tp in self.view_stack.iter_mut() {
+        if let Some(tp) = self.view_stack.last() {
             if let Some(widget) = self.views.get_mut(tp) {
-                match widget.draw(f, area, &self.state) {
-                    None => break,
-                    Some(ar) => area = ar,
-                }
+                widget.draw(f, f.size(), &self.state);
             }
         }
-
-        // for widget in self.state.widget_stack.iter().rev() {
-        //     widget.draw(f, self);
-        // }
     }
 
     pub(crate) fn on_input(&mut self, event: &Event) {
         let input = match event {
-            Event::Key(key) => match key.code {
-                KeyCode::Left => Some(UserInput::Left),
-                KeyCode::Right => Some(UserInput::Right),
-                KeyCode::Up => Some(UserInput::Up),
-                KeyCode::Down => Some(UserInput::Down),
-                KeyCode::Esc | KeyCode::Backspace => Some(UserInput::Back),
-                KeyCode::Enter => Some(UserInput::Enter),
-                KeyCode::Tab => Some(UserInput::Tab),
-                KeyCode::Char(c) => Some(UserInput::Char(c)),
+            Event::Key(key) => match key {
+                KeyEvent {
+                    code: KeyCode::Char('c'),
+                    modifiers: KeyModifiers::CONTROL,
+                } => {
+                    self.stop();
+                    None
+                }
+                KeyEvent {
+                    code: KeyCode::Left,
+                    ..
+                } => Some(UserInput::Left),
+                KeyEvent {
+                    code: KeyCode::Right,
+                    ..
+                } => Some(UserInput::Right),
+                KeyEvent {
+                    code: KeyCode::Up, ..
+                } => Some(UserInput::Up),
+                KeyEvent {
+                    code: KeyCode::Down,
+                    ..
+                } => Some(UserInput::Down),
+                KeyEvent {
+                    code: KeyCode::Home,
+                    ..
+                } => Some(UserInput::Top),
+                KeyEvent {
+                    code: KeyCode::End, ..
+                } => Some(UserInput::Bottom),
+                KeyEvent {
+                    code: KeyCode::Esc | KeyCode::Backspace,
+                    ..
+                } => Some(UserInput::Back),
+                KeyEvent {
+                    code: KeyCode::Enter,
+                    ..
+                } => Some(UserInput::Enter),
+                KeyEvent {
+                    code: KeyCode::Tab, ..
+                } => Some(UserInput::Tab),
+                KeyEvent {
+                    code: KeyCode::Char(c),
+                    ..
+                } => Some(UserInput::Char(c)),
                 _ => None,
             },
             Event::Mouse(mouse) => match mouse.kind {
@@ -116,14 +143,8 @@ impl App {
             }
 
             for action in actions {
-                match action {
-                    ActionResult::Exit => self.stop(),
-                    ActionResult::ReplaceView(view) => {
-                        if let Some(v) = self.view_stack.last_mut() {
-                            *v = view
-                        }
-                    }
-                    _ => {}
+                if let ActionResult::Exit = action {
+                    self.stop()
                 }
             }
         }

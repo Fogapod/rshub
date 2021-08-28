@@ -5,7 +5,7 @@ use parking_lot::RwLock;
 use crate::geolocation::{fetch, Location, IP};
 
 pub struct LocationsState {
-    pub locations: RwLock<HashMap<IP, Location>>,
+    pub items: RwLock<HashMap<IP, Location>>,
 }
 
 impl Default for LocationsState {
@@ -17,13 +17,13 @@ impl Default for LocationsState {
 impl LocationsState {
     pub fn new() -> Self {
         Self {
-            locations: RwLock::new(HashMap::new()),
+            items: RwLock::new(HashMap::new()),
         }
     }
 
     pub fn resolve(&self, address: IP) -> Result<(), Box<dyn std::error::Error>> {
         {
-            let locations = self.locations.read();
+            let locations = self.items.read();
 
             if locations.get(&address).is_some() {
                 return Ok(());
@@ -33,7 +33,7 @@ impl LocationsState {
         let location = fetch(&address)?;
 
         {
-            let mut locations = self.locations.write();
+            let mut locations = self.items.write();
             locations.insert(address, location);
         }
 

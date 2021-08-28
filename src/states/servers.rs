@@ -23,7 +23,7 @@ const SERVER_LIST_URL: &str = "https://api.unitystation.org/serverlist";
 // }
 
 pub struct ServersState {
-    pub servers: RwLock<HashMap<String, Server>>,
+    pub items: RwLock<HashMap<String, Server>>,
 }
 
 impl Default for ServersState {
@@ -35,8 +35,12 @@ impl Default for ServersState {
 impl ServersState {
     pub fn new() -> Self {
         Self {
-            servers: RwLock::new(HashMap::new()),
+            items: RwLock::new(HashMap::new()),
         }
+    }
+
+    pub fn count(&self) -> usize {
+        self.items.read().len()
     }
 
     pub fn update(
@@ -44,7 +48,7 @@ impl ServersState {
         data: ServerListData,
         locations: SharedLocationsState,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut servers = self.servers.write();
+        let mut servers = self.items.write();
         let mut existing = servers.clone();
 
         for sv in data.servers {

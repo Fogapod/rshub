@@ -9,37 +9,38 @@ use tui::terminal::Frame;
 
 use crate::datatypes::server::Server;
 use crate::input::UserInput;
-use crate::states::AppState;
-use crate::views::{ActionResult, AppView, Drawable, StatelessList, ViewType};
+use crate::states::{AppState, StatelessList};
+use crate::views::{ActionResult, Drawable, InputProcessor};
 
 use tui::{
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     symbols::DOT,
     text::{Span, Spans, Text},
-    widgets::{Block, Borders, Paragraph, Row, Table, Wrap},
+    widgets::{Block, Borders, Paragraph, Row, Table, TableState, Wrap},
 };
 
 pub struct ServerView {
-    state: StatelessList,
+    state: StatelessList<TableState>,
 }
 
 impl ServerView {
     pub fn new() -> Self {
         Self {
-            state: StatelessList::new(),
+            state: StatelessList::new(TableState::default()),
         }
     }
 }
 
+impl InputProcessor for ServerView {
+    fn on_input(&mut self, input: &UserInput, app: &AppState) -> ActionResult {
+        self.state.on_input(input, app.servers.count())
+    }
+}
+
 impl Drawable for ServerView {
-    fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: &AppState,
-    ) -> Option<Rect> {
-        let servers = app.servers.servers.read();
+    fn draw(&mut self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: &AppState) {
+        let servers = app.servers.items.read();
 
         let offline_servers = servers.values().filter(|s| s.offline).count();
 
@@ -181,31 +182,5 @@ impl Drawable for ServerView {
         drop(servers);
 
         f.render_stateful_widget(table, chunks[0], &mut self.state.state);
-
-        None
-    }
-}
-
-impl AppView for ServerView {
-    fn view_type(&self) -> ViewType {
-        ViewType::Servers
-    }
-
-    fn on_input(&mut self, input: &UserInput, app: &AppState) -> ActionResult {
-        match input {
-            UserInput::Up => {
-                self.state.previous(app.servers.servers.read().len());
-                ActionResult::Stop
-            }
-            UserInput::Down => {
-                self.state.next(app.servers.servers.read().len());
-                ActionResult::Stop
-            }
-            UserInput::Back => {
-                self.state.unselect();
-                ActionResult::Stop
-            }
-            _ => ActionResult::Continue,
-        }
     }
 }

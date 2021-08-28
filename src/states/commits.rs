@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use parking_lot::RwLock;
 
 use crate::constants::USER_AGENT;
@@ -8,7 +6,7 @@ use crate::datatypes::commit::{Commit, CommitRange};
 const GITHUB_REPO_URL: &str = "https://api.github.com/repos/unitystation/unitystation/commits";
 
 pub struct CommitState {
-    pub commits: RwLock<HashMap<String, Commit>>,
+    pub items: RwLock<Vec<Commit>>,
     client: reqwest::blocking::Client,
 }
 
@@ -27,13 +25,17 @@ impl CommitState {
         );
 
         Self {
-            commits: RwLock::new(HashMap::new()),
+            items: RwLock::new(Vec::new()),
             client: reqwest::blocking::Client::builder()
                 .user_agent(USER_AGENT)
                 .default_headers(headers)
                 .build()
                 .expect("creating client"),
         }
+    }
+
+    pub fn count(&self) -> usize {
+        self.items.read().len()
     }
 
     pub fn load(&self) {
@@ -66,11 +68,9 @@ impl CommitState {
     pub fn update(&self, data: CommitRange) -> Result<(), Box<dyn std::error::Error>> {
         log::info!("{:#?}", &data);
 
-        let mut commits = self.commits.write();
+        let mut commits = self.items.write();
 
-        for c in data.0 {
-            commits.insert(c.sha.clone(), c.into());
-        }
+        commits.append(&mut data.0.iter().map(Commit::from).collect());
 
         Ok(())
     }

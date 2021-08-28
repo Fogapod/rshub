@@ -6,21 +6,29 @@ use tui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
+    symbols,
     symbols::DOT,
     text::{Span, Spans, Text},
+    widgets::canvas::{Canvas, Line, Map, MapResolution},
     widgets::BorderType,
-    widgets::{Block, Paragraph, Tabs, Wrap},
+    widgets::{Block, Borders, Paragraph, Tabs, Wrap},
     Frame,
 };
 
+use crate::app::ActionResult;
+use crate::geolocation::IP;
 use crate::input::UserInput;
-use crate::states::AppState;
-use crate::views::{ActionResult, AppView, Drawable, StatefulList, ViewType};
+use crate::states::{AppState, StatefulList};
+use crate::views::{
+    commits::CommitView, installations::InstallationView, servers::ServerView, AppView, Drawable,
+    InputProcessor,
+};
 
 enum Tab {
     Servers,
     Installations,
     Commits,
+    Map,
 }
 
 impl Tab {
@@ -29,24 +37,44 @@ impl Tab {
             Self::Servers => {
                 let servers = &app.servers;
 
-                format!("servers [{}]", servers.servers.read().len())
+                format!("servers [{}]", servers.items.read().len())
             }
             Self::Installations => {
-                let servers = &app.servers;
+                let installations = &app.installations;
 
-                format!("installations [{}]", servers.servers.read().len())
+                format!("installations [{}]", installations.items.read().len())
             }
             Self::Commits => "commits".to_owned(),
+            Self::Map => "temp map".to_owned(),
         }
     }
 
     fn all() -> Vec<Self> {
-        vec![Self::Servers {}, Self::Installations {}, Self::Commits {}]
+        vec![
+            Self::Servers {},
+            Self::Installations {},
+            Self::Commits {},
+            Self::Map {},
+        ]
+    }
+}
+
+impl From<Tab> for usize {
+    fn from(value: Tab) -> usize {
+        match value {
+            Tab::Servers => 0,
+            Tab::Installations => 1,
+            Tab::Commits => 2,
+            Tab::Map => 3,
+        }
     }
 }
 
 pub struct TabView {
     state: StatefulList<Tab>,
+    view_servers: ServerView,
+    view_installations: InstallationView,
+    view_commits: CommitView,
 }
 
 impl TabView {
@@ -56,72 +84,70 @@ impl TabView {
         // select first item
         state.next(false);
 
-        Self { state }
+        Self {
+            state,
+            view_servers: ServerView::new(),
+            view_installations: InstallationView::new(),
+            view_commits: CommitView::new(),
+        }
     }
 
-    fn index_to_view(&self) -> ViewType {
+    fn selected_tab(&self) -> Tab {
         match self.state.selected() {
-            Some(0) => ViewType::Servers,
-            Some(1) => ViewType::Installations,
-            Some(2) => ViewType::Commits,
-            _ => ViewType::Servers,
+            Some(0) => Tab::Servers,
+            Some(1) => Tab::Installations,
+            Some(2) => Tab::Commits,
+            Some(3) => Tab::Map,
+            // not possible
+            _ => Tab::Servers,
         }
     }
 
-    const fn view_to_index(view: ViewType) -> usize {
-        match view {
-            ViewType::Servers => 0,
-            ViewType::Installations => 1,
-            ViewType::Commits => 2,
-            // TODO: REMOVE THIS!!! SEPARATE ENUM FOR TABS OR SOMETHING ELSE
-            _ => 0,
-        }
+    fn select_tab(&mut self, tab: Tab) {
+        self.state.select_index(tab.into());
     }
 }
 
-impl AppView for TabView {
-    fn view_type(&self) -> ViewType {
-        ViewType::Tab
-    }
-
-    fn on_input(&mut self, input: &UserInput, _: &AppState) -> ActionResult {
+impl InputProcessor for TabView {
+    fn on_input(&mut self, input: &UserInput, app: &AppState) -> ActionResult {
         match input {
             UserInput::Char('q') => ActionResult::Exit,
-            // Servers
             UserInput::Char('s') => {
-                self.state
-                    .select_index(Self::view_to_index(ViewType::Servers));
-                ActionResult::ReplaceView(self.index_to_view())
+                self.select_tab(Tab::Servers);
+                ActionResult::Continue
             }
-            // Installations
             UserInput::Char('i') => {
-                self.state
-                    .select_index(Self::view_to_index(ViewType::Installations));
-                ActionResult::ReplaceView(self.index_to_view())
+                self.select_tab(Tab::Installations);
+                ActionResult::Continue
             }
-            // Commits
             UserInput::Char('c') => {
-                self.state
-                    .select_index(Self::view_to_index(ViewType::Commits));
-                ActionResult::ReplaceView(self.index_to_view())
+                self.select_tab(Tab::Commits);
+                ActionResult::Continue
             }
-
+            UserInput::Char('m') => {
+                self.select_tab(Tab::Map);
+                ActionResult::Continue
+            }
             UserInput::Tab => {
                 self.state.next(true);
-                ActionResult::ReplaceView(self.index_to_view())
+                ActionResult::Continue
             }
-            _ => ActionResult::Continue,
+            // cannot move this to function because of match limitation for arms
+            // even if they implement same trait
+            _ => match self.selected_tab() {
+                Tab::Servers => self.view_servers.on_input(input, app),
+                Tab::Installations => self.view_installations.on_input(input, app),
+                Tab::Commits => self.view_commits.on_input(input, app),
+                Tab::Map => ActionResult::Continue,
+            },
         }
     }
 }
 
+impl AppView for TabView {}
+
 impl Drawable for TabView {
-    fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: &AppState,
-    ) -> Option<Rect> {
+    fn draw(&mut self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: &AppState) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(1), Constraint::Min(0)].as_ref())
@@ -157,6 +183,8 @@ impl Drawable for TabView {
             .map(|t| Spans::from(Span::styled(t.name(app), Style::default().fg(Color::Green))))
             .collect();
 
+        let selected = self.state.selected().unwrap_or(0);
+
         let tabs = Tabs::new(titles)
             .block(Block::default().border_type(BorderType::Plain))
             .highlight_style(
@@ -165,10 +193,76 @@ impl Drawable for TabView {
                     .add_modifier(Modifier::BOLD),
             )
             .divider(DOT)
-            .select(self.state.selected().unwrap_or(0));
+            .select(selected);
 
         f.render_widget(tabs, header_chunks[0]);
 
-        Some(chunks[1])
+        // cannot move this to function because of match limitation for arms
+        // even if they implement same trait
+        match self.selected_tab() {
+            Tab::Servers => self.view_servers.draw(f, chunks[1], app),
+            Tab::Installations => self.view_installations.draw(f, chunks[1], app),
+            Tab::Commits => self.view_commits.draw(f, chunks[1], app),
+            Tab::Map => draw_map(f, chunks[1], app),
+        };
     }
+}
+
+// temporarily resides here until I decide where to put it
+// TODO: render selected with labels by default, all without labels
+// TODO: zoom and map navigation
+fn draw_map(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: &AppState) {
+    let chunks = Layout::default()
+        .constraints(vec![Constraint::Percentage(100)])
+        .split(area);
+
+    let map = Canvas::default()
+        .block(Block::default().borders(Borders::ALL))
+        .marker(symbols::Marker::Braille)
+        .x_bounds([-180.0, 180.0])
+        .y_bounds([-90.0, 90.0])
+        .paint(|ctx| {
+            ctx.draw(&Map {
+                color: Color::Blue,
+                resolution: MapResolution::High,
+            });
+            ctx.layer();
+
+            // acquire lock once instead of doing it 20 times ahead
+            let locations = app.locations.items.read();
+
+            if let Some(user_location) = locations.get(&IP::Local) {
+                for sv in app.servers.items.read().values() {
+                    if let Some(location) = locations.get(&IP::Remote(sv.data.ip.clone())) {
+                        ctx.draw(&Line {
+                            x1: user_location.longitude,
+                            y1: user_location.latitude,
+                            x2: location.longitude,
+                            y2: location.latitude,
+                            color: Color::Yellow,
+                        });
+                    }
+                }
+
+                ctx.print(
+                    user_location.longitude,
+                    user_location.latitude,
+                    "X",
+                    Color::Red,
+                );
+            }
+
+            for sv in app.servers.items.read().values() {
+                if let Some(location) = locations.get(&IP::Remote(sv.data.ip.clone())) {
+                    let color = if sv.data.players != 0 {
+                        Color::Green
+                    } else {
+                        Color::Red
+                    };
+                    ctx.print(location.longitude, location.latitude, "O", color);
+                }
+            }
+        });
+
+    f.render_widget(map, chunks[0]);
 }
