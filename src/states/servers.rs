@@ -82,14 +82,14 @@ impl ServersState {
         thread::Builder::new()
             .name("server_fetch".to_owned())
             .spawn(move || {
-                if let Err(e) = app.locations.resolve(IP::Local) {
-                    log::error!("error fetching local ip: {}", e);
-                }
-
                 let client = reqwest::blocking::Client::builder()
                     .user_agent(USER_AGENT)
                     .build()
                     .expect("creating client");
+
+                if let Err(e) = app.locations.resolve(IP::Local) {
+                    log::error!("error fetching local ip: {}", e);
+                }
 
                 let loop_body = move || {
                     let req = match client.get(SERVER_LIST_URL).send() {

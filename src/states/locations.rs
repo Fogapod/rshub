@@ -2,10 +2,12 @@ use std::collections::HashMap;
 
 use parking_lot::RwLock;
 
-use crate::geolocation::{fetch, Location, IP};
+use crate::constants::USER_AGENT;
+use crate::geolocation::{Location, IP};
 
 pub struct LocationsState {
     pub items: RwLock<HashMap<IP, Location>>,
+    client: reqwest::blocking::Client,
 }
 
 impl Default for LocationsState {
@@ -18,6 +20,10 @@ impl LocationsState {
     pub fn new() -> Self {
         Self {
             items: RwLock::new(HashMap::new()),
+            client: reqwest::blocking::Client::builder()
+                .user_agent(USER_AGENT)
+                .build()
+                .expect("creating client"),
         }
     }
 
@@ -30,7 +36,7 @@ impl LocationsState {
             }
         }
 
-        let location = fetch(&address)?;
+        let location = address.fetch(&self.client)?;
 
         {
             let mut locations = self.items.write();

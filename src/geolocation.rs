@@ -14,16 +14,19 @@ pub struct Location {
     pub latitude: f64,
 }
 
-pub fn fetch(ip: &IP) -> Result<Location, Box<dyn std::error::Error>> {
-    let client = reqwest::blocking::Client::new();
+impl IP {
+    pub fn fetch(
+        &self,
+        client: &reqwest::blocking::Client,
+    ) -> Result<Location, Box<dyn std::error::Error>> {
+        let mut request = client.get(LOCATION_API_URL);
 
-    let mut request = client.get(LOCATION_API_URL);
+        if let Self::Remote(ref ip) = self {
+            request = request.query(&[("ip", ip)])
+        }
 
-    if let IP::Remote(ref ip) = ip {
-        request = request.query(&[("ip", ip)])
+        let resp = request.send().unwrap().json::<Location>().unwrap();
+
+        Ok(resp)
     }
-
-    let resp = request.send().unwrap().json::<Location>().unwrap();
-
-    Ok(resp)
 }

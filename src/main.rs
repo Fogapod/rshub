@@ -79,9 +79,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     spawn_input_thread(250, tx);
 
     loop {
-        // if app.state_changed() {
+        // TODO: only draw when something changed
         terminal.draw(|f| app.draw(f))?;
-        // }
 
         match rx.recv()? {
             EventOrTick::Input(event) => app.on_input(&event),
