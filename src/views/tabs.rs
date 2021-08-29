@@ -261,5 +261,12 @@ fn draw_map(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: &AppSt
             }
         });
 
-    f.render_widget(map, chunks[0]);
+    let area = chunks[0];
+
+    // map (canvas specifically) panics with overflow if area is 0
+    // area of size 0 could happen on wild terminal resizes
+    // this check uses 2 instead of 0 because borders add 2 to each dimension
+    if area.height > 2 && area.width > 2 {
+        f.render_widget(map, chunks[0]);
+    }
 }
