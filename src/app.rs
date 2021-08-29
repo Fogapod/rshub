@@ -55,9 +55,17 @@ impl App {
     }
 
     pub fn draw(&mut self, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
+        let size = f.size();
+
+        // map (canvas specifically) panics with overflow if terminal size is 0
+        // terminal of size 0 could happen on weird setups
+        if size.area() == 0 {
+            return;
+        }
+
         if let Some(tp) = self.view_stack.last() {
             if let Some(widget) = self.views.get_mut(tp) {
-                widget.draw(f, f.size(), &self.state);
+                widget.draw(f, size, &self.state);
             }
         }
     }
