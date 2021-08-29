@@ -29,7 +29,7 @@ pub struct ServersState {
 const DEBUG_GOOGOL_IP: &str = "8.8.8.8";
 
 impl ServersState {
-    pub async fn new(config: &AppConfig) -> Self {
+    pub async fn new(config: &AppConfig, locations: Arc<LocationsState>) -> Arc<Self> {
         let items = RwLock::new(HashMap::new());
 
         items.write().await.insert(
@@ -51,10 +51,14 @@ impl ServersState {
                 },
             },
         );
-        Self {
+        let instance = Arc::new(Self {
             items,
             update_interval: Duration::from_secs(config.args.update_interval),
-        }
+        });
+
+        tokio::task::spawn(Self::server_fetch_task(instance.clone(), locations));
+
+        instance
     }
 
     pub async fn count(&self) -> usize {

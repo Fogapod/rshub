@@ -14,12 +14,18 @@ pub struct LocationsState {
 }
 
 impl LocationsState {
-    pub async fn new(config: &AppConfig, queue: mpsc::UnboundedSender<IP>) -> Self {
-        Self {
+    pub async fn new(config: &AppConfig) -> Arc<Self> {
+        let (tx, rx) = mpsc::unbounded_channel::<IP>();
+
+        let instance = Arc::new(Self {
             items: RwLock::new(HashMap::new()),
-            queue,
+            queue: tx,
             geo_provider: config.args.geo_provider.clone(),
-        }
+        });
+
+        tokio::task::spawn(Self::location_fetch_task(instance.clone(), rx));
+
+        instance
     }
 
     pub async fn resolve(&self, address: IP) -> Result<(), Box<dyn std::error::Error>> {
