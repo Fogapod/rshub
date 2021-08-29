@@ -32,15 +32,22 @@ impl ServerView {
     }
 }
 
+#[async_trait::async_trait]
 impl InputProcessor for ServerView {
-    fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
-        self.state.on_input(input, app.servers.count())
+    async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
+        self.state.on_input(input, app.servers.count().await)
     }
 }
 
+#[async_trait::async_trait]
 impl Drawable for ServerView {
-    fn draw(&mut self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: &AppState) {
-        let servers = app.servers.items.read();
+    async fn draw(
+        &mut self,
+        f: &mut Frame<CrosstermBackend<io::Stdout>>,
+        area: Rect,
+        app: &AppState,
+    ) {
+        let servers = app.servers.items.read().await;
 
         let offline_servers = servers.values().filter(|s| s.offline).count();
 

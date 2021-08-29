@@ -25,14 +25,21 @@ impl InstallationView {
     }
 }
 
+#[async_trait::async_trait]
 impl InputProcessor for InstallationView {
-    fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
-        self.state.on_input(input, app.commits.count())
+    async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
+        self.state.on_input(input, app.commits.count().await)
     }
 }
 
+#[async_trait::async_trait]
 impl Drawable for InstallationView {
-    fn draw(&mut self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, _: &AppState) {
+    async fn draw(
+        &mut self,
+        f: &mut Frame<CrosstermBackend<io::Stdout>>,
+        area: Rect,
+        _: &AppState,
+    ) {
         let chunks = Layout::default()
             .constraints(vec![Constraint::Percentage(100)])
             .split(area);

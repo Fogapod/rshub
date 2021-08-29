@@ -1,4 +1,4 @@
-use parking_lot::RwLock;
+use tokio::sync::RwLock;
 
 use crate::datatypes::installation::Installation;
 
@@ -6,16 +6,14 @@ pub struct InstallationsState {
     pub items: RwLock<Vec<Installation>>,
 }
 
-impl Default for InstallationsState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl InstallationsState {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         Self {
             items: RwLock::new(Vec::new()),
         }
+    }
+
+    pub async fn count(&self) -> usize {
+        self.items.read().await.len()
     }
 }

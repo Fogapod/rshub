@@ -23,9 +23,18 @@ geolocation = []
 [dependencies]
 serde_json = "1"
 crossterm = "0.21"
-parking_lot = "0.11"
 better-panic = "0.2.0"
 dirs-next = "2.0.0"
+async-trait = "0.1.51"
+
+[dependencies.tokio]
+version = "1"
+default-features = false
+features = ["rt-multi-thread", "sync"]
+
+[dependencies.futures]
+version = "0.3.16"
+default-features = false
 
 [dependencies.tui]
 version = "0.16.0"
@@ -44,7 +53,7 @@ features = ["derive"]
 [dependencies.reqwest]
 version = "0.11.4"
 default-features = false
-features = ["blocking", "json"]
+features = ["json", "stream"]
 
 [dependencies.log]
 version = "0.4"
@@ -56,5 +65,5 @@ version = "2.0.2"
 [profile.release]
 codegen-units = 1
 lto = true
-strip = true
 panic = 'abort'
+strip = true

@@ -13,9 +13,9 @@ pub struct Location {
 }
 
 impl IP {
-    pub fn fetch(
+    pub async fn fetch(
         &self,
-        client: &reqwest::blocking::Client,
+        client: &reqwest::Client,
         url: &str,
     ) -> Result<Location, Box<dyn std::error::Error>> {
         let mut request = client.get(format!("{}/json", url));
@@ -24,7 +24,13 @@ impl IP {
             request = request.query(&[("ip", ip)])
         }
 
-        let resp = request.send().unwrap().json::<Location>().unwrap();
+        let resp = request
+            .send()
+            .await
+            .unwrap()
+            .json::<Location>()
+            .await
+            .unwrap();
 
         Ok(resp)
     }

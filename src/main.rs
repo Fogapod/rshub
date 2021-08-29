@@ -6,7 +6,6 @@ mod geolocation;
 mod input;
 mod states;
 mod views;
-mod waitable_mutex;
 
 use std::io;
 use std::time::Duration;
@@ -48,7 +47,8 @@ fn cleanup_terminal(terminal: Option<&mut Terminal<CrosstermBackend<io::Stdout>>
 const fn verbosity_to_log_level(verbosity: u32) -> LevelFilter {
     let mut verbosity = verbosity;
 
-    if cfg!(debug_assertions) {
+    #[cfg(debug_assertions)]
+    {
         // jump straight to debug
         verbosity += 3;
     }
@@ -78,9 +78,11 @@ fn _main() -> Result<(), Box<dyn std::error::Error>> {
 
     setup_logger(&config)?;
 
-    let mut app = app::App::new(config);
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
 
-    let handles = app.spawn_threads();
+    let mut app = rt.block_on(app::App::new(config));
 
     let mut terminal = {
         enable_raw_mode()?;
@@ -93,27 +95,24 @@ fn _main() -> Result<(), Box<dyn std::error::Error>> {
         Terminal::new(backend)?
     };
 
-    let rx = spawn_input_thread(Duration::from_millis(200));
+    {
+        let rx = spawn_input_thread(Duration::from_millis(200));
 
-    loop {
-        // TODO: only draw when something changed
-        terminal.draw(|f| app.draw(f))?;
+        loop {
+            // TODO: only draw when something changed
+            terminal.draw(|f| {
+                rt.block_on(app.draw(f));
+            })?;
 
-        match rx.recv()? {
-            EventOrTick::Input(event) => app.on_input(&event),
-            EventOrTick::Tick => {}
+            match rx.recv()? {
+                EventOrTick::Input(event) => rt.block_on(app.on_input(&event)),
+                EventOrTick::Tick => {}
+            }
+
+            if app.stopped {
+                break;
+            }
         }
-
-        if app.stopped {
-            break;
-        }
-    }
-
-    drop(rx);
-
-    for handle in handles {
-        log::info!("joining {:?}", handle.thread().name());
-        handle.join().unwrap();
     }
 
     cleanup_terminal(Some(&mut terminal));

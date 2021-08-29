@@ -18,14 +18,19 @@ pub enum ViewType {
     Tab,
 }
 
+#[async_trait::async_trait]
 pub trait Drawable {
-    fn draw(&mut self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: &AppState);
+    async fn draw(
+        &mut self,
+        f: &mut Frame<CrosstermBackend<io::Stdout>>,
+        area: Rect,
+        app: &AppState,
+    );
 }
 
+#[async_trait::async_trait]
 pub trait InputProcessor {
-    fn on_input(&mut self, _: &UserInput, _: &AppState) -> Option<AppAction> {
-        None
-    }
+    async fn on_input(&mut self, _: &UserInput, _: &AppState) -> Option<AppAction>;
 }
 
 pub trait AppView: Drawable + InputProcessor {}

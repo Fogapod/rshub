@@ -1,4 +1,5 @@
 use std::io;
+
 use tui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -29,20 +30,27 @@ impl CommitView {
     }
 }
 
+#[async_trait::async_trait]
 impl InputProcessor for CommitView {
-    fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
-        self.state.on_input(input, app.commits.count())
+    async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
+        self.state.on_input(input, app.commits.count().await)
     }
 }
 
+#[async_trait::async_trait]
 impl Drawable for CommitView {
-    fn draw(&mut self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: &AppState) {
+    async fn draw(
+        &mut self,
+        f: &mut Frame<CrosstermBackend<io::Stdout>>,
+        area: Rect,
+        app: &AppState,
+    ) {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(50), Constraint::Min(0)])
             .split(area);
 
-        let commits = app.commits.items.read();
+        let commits = app.commits.items.read().await;
 
         let items: Vec<ListItem> = commits
             .iter()
@@ -80,7 +88,10 @@ impl Drawable for CommitView {
         drop(commits);
 
         if !self.loaded {
-            app.commits.load();
+            let commits = app.commits.clone();
+
+            tokio::task::spawn(async move { commits.load().await });
+
             self.loaded = true;
         }
     }

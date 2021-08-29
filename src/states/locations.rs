@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use parking_lot::RwLock;
+use tokio::sync::{mpsc, RwLock};
 
 use crate::config::AppConfig;
 use crate::constants::USER_AGENT;
@@ -8,37 +9,27 @@ use crate::geolocation::{Location, IP};
 
 pub struct LocationsState {
     pub items: RwLock<HashMap<IP, Location>>,
-    client: reqwest::blocking::Client,
+    queue: mpsc::UnboundedSender<IP>,
     geo_provider: String,
 }
 
 impl LocationsState {
-    pub fn new(config: &AppConfig) -> Self {
+    pub async fn new(config: &AppConfig, queue: mpsc::UnboundedSender<IP>) -> Self {
         Self {
             items: RwLock::new(HashMap::new()),
-            client: reqwest::blocking::Client::builder()
-                .user_agent(USER_AGENT)
-                .build()
-                .expect("creating client"),
+            queue,
             geo_provider: config.args.geo_provider.clone(),
         }
     }
 
-    pub fn resolve(&self, address: IP) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn resolve(&self, address: IP) -> Result<(), Box<dyn std::error::Error>> {
         {
-            let locations = self.items.read();
-
-            if locations.get(&address).is_some() {
+            if self.items.read().await.get(&address).is_some() {
                 return Ok(());
             }
         }
 
-        let location = address.fetch(&self.client, &self.geo_provider)?;
-
-        {
-            let mut locations = self.items.write();
-            locations.insert(address, location);
-        }
+        self.queue.send(address)?;
 
         Ok(())
     }
@@ -46,4 +37,21 @@ impl LocationsState {
     // pub fn get(&self, address: IP) -> Option<Location> {
     //     self.locations.read().get(&address).cloned()
     // }
+
+    pub async fn location_fetch_task(
+        locations: Arc<LocationsState>,
+        mut rx: mpsc::UnboundedReceiver<IP>,
+    ) {
+        let client = reqwest::Client::builder()
+            .user_agent(USER_AGENT)
+            .build()
+            .expect("creating client");
+
+        while let Some(ip) = rx.recv().await {
+            log::info!("resolving location: {:?}", ip);
+            let location = ip.fetch(&client, &locations.geo_provider).await.unwrap();
+
+            locations.items.write().await.insert(ip, location);
+        }
+    }
 }

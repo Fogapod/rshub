@@ -10,7 +10,6 @@ use crate::config::AppConfig;
 use crate::input::UserInput;
 use crate::states::AppState;
 use crate::views::{tabs::TabView, AppView, ViewType};
-use crate::waitable_mutex::WaitableMutex;
 
 pub enum AppAction {
     Accepted,
@@ -23,18 +22,16 @@ pub struct App {
 
     pub state: Arc<AppState>,
     pub stopped: bool,
-    pub(crate) stop_lock: Arc<WaitableMutex<bool>>,
 }
 
 impl App {
-    pub fn new(config: AppConfig) -> Self {
+    pub async fn new(config: AppConfig) -> Self {
         let mut instance = Self {
-            state: Arc::new(AppState::new(config)),
+            state: Arc::new(AppState::new(config).await),
             views: HashMap::new(),
 
             view_stack: vec![ViewType::Tab],
             stopped: false,
-            stop_lock: Arc::new(WaitableMutex::new(false)),
         };
 
         instance.register_view(ViewType::Tab, Box::new(TabView::new()));
@@ -46,23 +43,15 @@ impl App {
         self.views.insert(tp, view);
     }
 
-    pub fn spawn_threads(&self) -> Vec<std::thread::JoinHandle<()>> {
-        vec![self.state.servers.spawn_server_fetch_thread(
-            self.state.locations.clone(),
-            self.state.servers.clone(),
-            self.stop_lock.clone(),
-        )]
-    }
-
-    pub fn draw(&mut self, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
+    pub async fn draw(&mut self, f: &mut Frame<'_, CrosstermBackend<io::Stdout>>) {
         if let Some(tp) = self.view_stack.last() {
             if let Some(widget) = self.views.get_mut(tp) {
-                widget.draw(f, f.size(), &self.state);
+                widget.draw(f, f.size(), &self.state).await;
             }
         }
     }
 
-    pub(crate) fn on_input(&mut self, event: &Event) {
+    pub(crate) async fn on_input(&mut self, event: &Event) {
         let input = match event {
             Event::Key(key) => match key {
                 KeyEvent {
@@ -122,7 +111,7 @@ impl App {
         if let Some(input) = input {
             for tp in self.view_stack.iter_mut().rev() {
                 if let Some(widget) = self.views.get_mut(tp) {
-                    if let Some(action) = widget.on_input(&input, &self.state) {
+                    if let Some(action) = widget.on_input(&input, &self.state).await {
                         match action {
                             AppAction::Accepted => {
                                 break;
@@ -140,6 +129,5 @@ impl App {
 
     fn stop(&mut self) {
         self.stopped = true;
-        self.stop_lock.set(true);
     }
 }
