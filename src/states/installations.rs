@@ -7,7 +7,7 @@ use crate::config::AppConfig;
 use crate::constants::USER_AGENT;
 use crate::datatypes::{
     installation::{Installation, InstallationAction, InstallationKind},
-    server::GameVersion,
+    server::{DownloadUrl, GameVersion},
 };
 
 pub struct InstallationsState {
@@ -74,7 +74,22 @@ impl InstallationsState {
                     );
                 }
                 InstallationAction::Install(version) => {
-                    log::info!("installing: {:?}", version);
+                    let url = match &version.download {
+                        DownloadUrl::Valid(url) => url,
+                        DownloadUrl::Untrusted(bad) => {
+                            log::warn!(
+                                "not downloading untrusted content: {}",
+                                String::from(bad.to_owned())
+                            );
+                            continue;
+                        }
+                        DownloadUrl::Invalid(bad) => {
+                            log::warn!("not downloading invalid content: {}", bad);
+                            continue;
+                        }
+                    };
+
+                    log::info!("installing: {} ({})", &version, &String::from(url.clone()));
 
                     installations.write().await.items.insert(
                         version.clone(),

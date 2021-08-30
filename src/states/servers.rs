@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 use crate::config::AppConfig;
 use crate::constants::SERVER_LIST_URL;
 use crate::constants::USER_AGENT;
-use crate::datatypes::server::{GameVersion, Server, ServerListData};
+use crate::datatypes::server::{DownloadUrl, GameVersion, Server, ServerListData};
 use crate::datatypes::{geolocation::IP, installation::InstallationAction};
 use crate::states::{InstallationsState, LocationsState};
 
@@ -41,7 +41,7 @@ impl ServersState {
             version: GameVersion {
                 build: 0,
                 fork: "origin".to_owned(),
-                download: "none".to_owned(),
+                download: DownloadUrl::new("https://evil.exploit"),
             },
             fps: 42,
             time: "13:37".to_owned(),

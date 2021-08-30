@@ -139,15 +139,10 @@ impl Drawable for ServerView {
             });
 
             let text1 = Text::from(format!(
-                r#"version: {} {}
+                r#"version: {}
                    map:     {} ({})
                    address: {}:{}"#,
-                selected.version.fork,
-                selected.version.build,
-                selected.map,
-                selected.gamemode,
-                selected.ip,
-                selected.port,
+                selected.version, selected.map, selected.gamemode, selected.ip, selected.port,
             ));
 
             let selected_location =

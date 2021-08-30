@@ -21,7 +21,7 @@ struct CliArgs {
     verbose: u32,
     /// Geolocation provider (ifconfig.co compatible)
     #[clap(long, default_value = DEFAULT_GEO_PROVIDER_URL)]
-    geo_provider: String,
+    geo_provider: reqwest::Url,
 }
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ pub struct AppConfig {
     pub log_file: PathBuf,
     pub update_interval: u64,
     pub verbose: u32,
-    pub geo_provider: String,
+    pub geo_provider: reqwest::Url,
 
     pub data_dir: PathBuf,
 }

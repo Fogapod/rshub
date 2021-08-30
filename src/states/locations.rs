@@ -10,7 +10,7 @@ use crate::datatypes::geolocation::{Location, IP};
 pub struct LocationsState {
     pub items: HashMap<IP, Location>,
     queue: mpsc::UnboundedSender<IP>,
-    geo_provider: String,
+    geo_provider: reqwest::Url,
 }
 
 impl LocationsState {
@@ -58,6 +58,7 @@ impl LocationsState {
         );
 
         let geo_provider = locations.read().await.geo_provider.clone();
+        let errors = Arc::new(RwLock::new(Vec::new()));
 
         while let Some(ip) = rx.recv().await {
             log::debug!("resolving location: {:?}", ip);
@@ -65,6 +66,7 @@ impl LocationsState {
             let client = client.clone();
             let locations = locations.clone();
             let geo_provider = geo_provider.clone();
+            let errors = errors.clone();
 
             tokio::spawn(async move {
                 let mut request = client.get(format!("{}/json", geo_provider));
@@ -73,20 +75,32 @@ impl LocationsState {
                     request = request.query(&[("ip", ip)])
                 }
 
-                let location = request
-                    .send()
-                    .await
-                    .unwrap()
-                    .json::<Location>()
-                    .await
-                    .unwrap();
+                let response = request.send().await;
+
+                let response = match response {
+                    Ok(response) => response,
+                    Err(err) => {
+                        log::error!("error sending location request: {}", &err);
+                        errors.write().await.push(err);
+                        return;
+                    }
+                };
+
+                let location = match response.json::<Location>().await {
+                    Ok(location) => location,
+                    Err(err) => {
+                        log::error!("error parsing location request: {}", &err);
+                        errors.write().await.push(err);
+                        return;
+                    }
+                };
 
                 log::debug!("resolved location: {:?} -> {:?}", ip, location);
 
                 if location.is_valid() {
                     locations.write().await.items.insert(ip, location);
                 } else {
-                    log::warn!("bad location");
+                    log::error!("bad location: {:?}", location);
                 }
             });
         }

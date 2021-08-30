@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
@@ -100,10 +102,35 @@ impl Default for ServerData {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum DownloadUrl {
+    Valid(reqwest::Url),
+    Untrusted(reqwest::Url),
+    Invalid(String),
+}
+
+impl DownloadUrl {
+    pub fn new(url: &str) -> Self {
+        match reqwest::Url::parse(url) {
+            Ok(parsed) => {
+                if url == "https://evil.exploit" {
+                    Self::Untrusted(parsed)
+                } else {
+                    Self::Valid(parsed)
+                }
+            }
+            Err(e) => {
+                log::debug!("error parsing URL: {}", e);
+                Self::Invalid(url.to_owned())
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct GameVersion {
     pub fork: String,
     pub build: u32,
-    pub download: String,
+    pub download: DownloadUrl,
 }
 
 impl GameVersion {
@@ -118,8 +145,22 @@ impl GameVersion {
         Self {
             fork,
             build,
-            download,
+            download: DownloadUrl::new(&download),
         }
+    }
+}
+
+impl fmt::Display for GameVersion {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}-{}", self.fork, self.build)?;
+
+        match self.download {
+            DownloadUrl::Valid(_) => {}
+            DownloadUrl::Untrusted(_) => write!(f, " [untrusted download URL]")?,
+            DownloadUrl::Invalid(_) => write!(f, " [bad download URL]")?,
+        }
+
+        Ok(())
     }
 }
 
