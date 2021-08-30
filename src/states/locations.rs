@@ -14,7 +14,10 @@ pub struct LocationsState {
 }
 
 impl LocationsState {
-    pub async fn new(config: &AppConfig) -> Arc<RwLock<Self>> {
+    pub async fn new(
+        config: &AppConfig,
+        managed_tasks: &mut Vec<tokio::task::JoinHandle<()>>,
+    ) -> Arc<RwLock<Self>> {
         let (tx, rx) = mpsc::unbounded_channel::<IP>();
 
         let instance = Arc::new(RwLock::new(Self {
@@ -23,7 +26,10 @@ impl LocationsState {
             geo_provider: config.geo_provider.clone(),
         }));
 
-        tokio::task::spawn(Self::location_fetch_task(instance.clone(), rx));
+        managed_tasks.push(tokio::task::spawn(Self::location_fetch_task(
+            instance.clone(),
+            rx,
+        )));
 
         instance
     }
@@ -41,7 +47,7 @@ impl LocationsState {
     }
 
     pub async fn location_fetch_task(
-        locations: Arc<RwLock<LocationsState>>,
+        locations: Arc<RwLock<Self>>,
         mut rx: mpsc::UnboundedReceiver<IP>,
     ) {
         let client = Arc::new(

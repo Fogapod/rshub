@@ -6,12 +6,11 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 
 use crate::config::AppConfig;
+use crate::constants::SERVER_LIST_URL;
 use crate::constants::USER_AGENT;
 use crate::datatypes::server::{GameVersion, Server, ServerListData};
 use crate::datatypes::{geolocation::IP, installation::InstallationAction};
 use crate::states::{InstallationsState, LocationsState};
-
-const SERVER_LIST_URL: &str = "https://api.unitystation.org/serverlist";
 
 // use std::collections::hash_map::DefaultHasher;
 // use std::hash::{Hash, Hasher};
@@ -32,6 +31,7 @@ const DEBUG_GOOGOL_IP: &str = "8.8.8.8";
 impl ServersState {
     pub async fn new(
         config: &AppConfig,
+        managed_tasks: &mut Vec<tokio::task::JoinHandle<()>>,
         locations: Arc<RwLock<LocationsState>>,
         installations: Arc<RwLock<InstallationsState>>,
     ) -> Arc<RwLock<Self>> {
@@ -57,11 +57,11 @@ impl ServersState {
             update_interval: Duration::from_secs(config.update_interval),
         }));
 
-        tokio::task::spawn(Self::server_fetch_task(
+        managed_tasks.push(tokio::task::spawn(Self::server_fetch_task(
             instance.clone(),
             locations,
             installations,
-        ));
+        )));
 
         instance
     }
@@ -156,7 +156,7 @@ impl ServersState {
     }
 
     pub async fn server_fetch_task(
-        servers: Arc<RwLock<ServersState>>,
+        servers: Arc<RwLock<Self>>,
         locations: Arc<RwLock<LocationsState>>,
         installations: Arc<RwLock<InstallationsState>>,
     ) {

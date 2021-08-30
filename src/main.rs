@@ -7,6 +7,7 @@ mod states;
 mod views;
 
 use std::io;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use tui::{backend::CrosstermBackend, Terminal};
@@ -114,6 +115,12 @@ fn _main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             if app.stopped {
+                log::info!("app stopped, cleaning up");
+                break;
+            }
+
+            if app.panicked.load(Ordering::Relaxed) {
+                log::error!("app panicked, cleaning up");
                 break;
             }
         }

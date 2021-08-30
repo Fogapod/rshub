@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use tokio::sync::{mpsc, RwLock};
 
+use crate::config::AppConfig;
+use crate::constants::USER_AGENT;
 use crate::datatypes::{
     installation::{Installation, InstallationAction, InstallationKind},
     server::GameVersion,
@@ -14,7 +16,10 @@ pub struct InstallationsState {
 }
 
 impl InstallationsState {
-    pub async fn new() -> Arc<RwLock<Self>> {
+    pub async fn new(
+        _: &AppConfig,
+        managed_tasks: &mut Vec<tokio::task::JoinHandle<()>>,
+    ) -> Arc<RwLock<Self>> {
         let (tx, rx) = mpsc::unbounded_channel();
 
         let instance = Arc::new(RwLock::new(Self {
@@ -22,7 +27,10 @@ impl InstallationsState {
             queue: tx,
         }));
 
-        tokio::task::spawn(Self::installation_handler_task(instance.clone(), rx));
+        managed_tasks.push(tokio::task::spawn(Self::installation_handler_task(
+            instance.clone(),
+            rx,
+        )));
 
         instance
     }
@@ -32,9 +40,14 @@ impl InstallationsState {
     }
 
     pub async fn installation_handler_task(
-        installations: Arc<RwLock<InstallationsState>>,
+        installations: Arc<RwLock<Self>>,
         mut rx: mpsc::UnboundedReceiver<InstallationAction>,
     ) {
+        let _ = reqwest::Client::builder()
+            .user_agent(USER_AGENT)
+            .build()
+            .expect("creating client");
+
         while let Some(action) = rx.recv().await {
             log::info!("instalaltion action: {:?}", action);
 

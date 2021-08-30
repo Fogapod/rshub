@@ -30,7 +30,7 @@ pub trait Drawable {
 
 #[async_trait::async_trait]
 pub trait InputProcessor {
-    async fn on_input(&mut self, _: &UserInput, _: &AppState) -> Option<AppAction>;
+    async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction>;
 }
 
 pub trait AppView: Drawable + InputProcessor {}

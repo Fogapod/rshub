@@ -1,4 +1,5 @@
 use std::io;
+use std::sync::atomic::AtomicBool;
 use std::{collections::HashMap, sync::Arc};
 
 use tui::backend::CrosstermBackend;
@@ -21,17 +22,23 @@ pub struct App {
     view_stack: Vec<ViewType>,
 
     pub state: Arc<AppState>,
+
     pub stopped: bool,
+    pub panicked: Arc<AtomicBool>,
 }
 
 impl App {
     pub async fn new(config: AppConfig) -> Self {
+        let panic_bool = Arc::new(AtomicBool::new(false));
+
         let mut instance = Self {
-            state: Arc::new(AppState::new(config).await),
+            state: AppState::new(config, panic_bool.clone()).await,
             views: HashMap::new(),
 
             view_stack: vec![ViewType::Tab],
+
             stopped: false,
+            panicked: panic_bool,
         };
 
         instance.register_view(ViewType::Tab, Box::new(TabView::new()));

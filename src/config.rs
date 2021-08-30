@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 
 use clap::Clap;
 
+use crate::constants::DEFAULT_GEO_PROVIDER_URL;
+
 #[derive(Clap, Debug)]
 #[clap(version = clap::crate_version!(), about = "UnityStation server hub")]
 struct CliArgs {
@@ -18,7 +20,7 @@ struct CliArgs {
     #[clap(short, long, parse(from_occurrences))]
     verbose: u32,
     /// Geolocation provider (ifconfig.co compatible)
-    #[clap(long, default_value = "https://ifconfig.based.computer")]
+    #[clap(long, default_value = DEFAULT_GEO_PROVIDER_URL)]
     geo_provider: String,
 }
 
