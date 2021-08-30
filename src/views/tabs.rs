@@ -38,16 +38,12 @@ impl Tab {
     async fn name(&self, app: &AppState) -> String {
         match self {
             Self::Servers => {
-                let servers = &app.servers;
-
-                format!("servers [{}]", servers.read().await.count())
+                format!("servers [{}]", app.servers.read().await.count())
             }
             Self::Installations => {
-                let installations = &app.installations;
-
-                format!("installations [{}]", installations.read().await.count())
+                format!("installations [{}]", app.installations.read().await.count())
             }
-            Self::Commits => "commits".to_owned(),
+            Self::Commits => format!("commits [{}]", app.commits.read().await.items.len()),
             Self::Map => "temp map".to_owned(),
         }
     }

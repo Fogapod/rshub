@@ -49,7 +49,7 @@ impl Drawable for CommitView {
     ) {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(50), Constraint::Min(0)])
+            .constraints([Constraint::Length(60), Constraint::Min(0)])
             .split(area);
 
         let commits = &app.commits.read().await.items;
@@ -60,29 +60,45 @@ impl Drawable for CommitView {
             .collect();
 
         let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL).title("messages"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("latest commits")
+                    .title_alignment(Alignment::Center),
+            )
             .highlight_style(Style::default().bg(Color::DarkGray));
 
         f.render_stateful_widget(list, chunks[0], &mut self.state.state);
 
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0)])
-            .split(chunks[1]);
-
         if let Some(i) = self.state.state.selected() {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(3), Constraint::Min(0)])
+                .split(chunks[1]);
+
             let selected = &commits[i];
 
-            let text = Text::from(format!("author: {}", selected.author.name));
-
-            let par = Paragraph::new(text)
-                .alignment(Alignment::Left)
-                .block(Block::default().borders(Borders::ALL).title("author"))
-                .wrap(Wrap { trim: true });
-
-            f.render_widget(par, chunks[0]);
             f.render_widget(
-                Block::default().borders(Borders::ALL).title("info"),
+                Paragraph::new(Text::from(format!("author: {}", selected.author.name)))
+                    .alignment(Alignment::Left)
+                    .block(Block::default().borders(Borders::ALL).title("author"))
+                    .wrap(Wrap { trim: true }),
+                chunks[0],
+            );
+            f.render_widget(
+                Paragraph::new(Text::from(selected.message.clone()))
+                    .alignment(Alignment::Left)
+                    .block(Block::default().borders(Borders::ALL).title("info"))
+                    .wrap(Wrap { trim: true }),
+                chunks[1],
+            );
+        } else {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(50), Constraint::Length(1)])
+                .split(chunks[1]);
+            f.render_widget(
+                Paragraph::new("select commit").alignment(Alignment::Center),
                 chunks[1],
             );
         }
