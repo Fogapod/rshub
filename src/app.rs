@@ -62,6 +62,10 @@ impl App {
                     None
                 }
                 KeyEvent {
+                    code: KeyCode::Char(c),
+                    ..
+                } => Some(UserInput::Char(c)),
+                KeyEvent {
                     code: KeyCode::Left,
                     ..
                 } => Some(UserInput::Left),
@@ -84,20 +88,19 @@ impl App {
                     code: KeyCode::End, ..
                 } => Some(UserInput::Bottom),
                 KeyEvent {
-                    code: KeyCode::Esc | KeyCode::Backspace,
-                    ..
+                    code: KeyCode::Esc, ..
                 } => Some(UserInput::Back),
                 KeyEvent {
                     code: KeyCode::Enter,
                     ..
                 } => Some(UserInput::Enter),
                 KeyEvent {
+                    code: KeyCode::Delete | KeyCode::Backspace,
+                    ..
+                } => Some(UserInput::Delete),
+                KeyEvent {
                     code: KeyCode::Tab, ..
                 } => Some(UserInput::Tab),
-                KeyEvent {
-                    code: KeyCode::Char(c),
-                    ..
-                } => Some(UserInput::Char(c)),
                 _ => None,
             },
             Event::Mouse(mouse) => match mouse.kind {

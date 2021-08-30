@@ -6,7 +6,7 @@ use crate::datatypes::installation::{Installation, InstallationAction};
 
 pub struct InstallationsState {
     pub items: Vec<Installation>,
-    queue: mpsc::UnboundedSender<InstallationAction>,
+    pub queue: mpsc::UnboundedSender<InstallationAction>,
 }
 
 impl InstallationsState {

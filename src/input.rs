@@ -6,15 +6,21 @@ use crossterm::event::{self, Event};
 
 #[derive(Debug)]
 pub enum UserInput<'a> {
+    // directions
     Up,
     Down,
     Left,
     Right,
+    // gotos
     Top,
     Bottom,
+    // actions
     Back,
     Enter,
+    Delete,
+    // misc
     Tab,
+    // custom
     Char(&'a char),
 }
 

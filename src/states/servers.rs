@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,7 +23,7 @@ const SERVER_LIST_URL: &str = "https://api.unitystation.org/serverlist";
 // }
 
 pub struct ServersState {
-    pub items: HashMap<String, Server>,
+    pub items: Vec<Server>,
     update_interval: Duration,
 }
 
@@ -33,28 +34,24 @@ impl ServersState {
         config: &AppConfig,
         locations: Arc<RwLock<LocationsState>>,
     ) -> Arc<RwLock<Self>> {
-        let mut items = HashMap::new();
-
-        items.insert(
-            DEBUG_GOOGOL_IP.to_owned(),
-            Server {
-                ip: IP::Remote(DEBUG_GOOGOL_IP.to_owned()),
-                offline: true,
-                data: crate::datatypes::server::ServerData {
-                    build: 0,
-                    download: "none".to_owned(),
-                    fork: "origin".to_owned(),
-                    fps: 42,
-                    time: "13:37".to_owned(),
-                    gamemode: "FFA".to_owned(),
-                    players: 7,
-                    map: "world".to_owned(),
-                    ip: DEBUG_GOOGOL_IP.to_owned(),
-                    name: "googol".to_owned(),
-                    port: 22,
-                },
+        let items = vec![Server {
+            ip: IP::Remote(DEBUG_GOOGOL_IP.to_owned()),
+            offline: true,
+            data: crate::datatypes::server::ServerData {
+                build: 0,
+                download: "none".to_owned(),
+                fork: "origin".to_owned(),
+                fps: 42,
+                time: "13:37".to_owned(),
+                gamemode: "FFA".to_owned(),
+                players: 7,
+                map: "world".to_owned(),
+                ip: DEBUG_GOOGOL_IP.to_owned(),
+                name: "googol".to_owned(),
+                port: 22,
             },
-        );
+        }];
+
         let instance = Arc::new(RwLock::new(Self {
             items,
             update_interval: Duration::from_secs(config.args.update_interval),
@@ -74,11 +71,19 @@ impl ServersState {
         data: ServerListData,
         locations: Arc<RwLock<LocationsState>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut existing = self.items.clone();
+        let mut existing: HashMap<String, &mut Server> = self
+            .items
+            .iter_mut()
+            .map(|i| (i.data.ip.clone(), i))
+            .collect();
+
+        // avoid borrow issues in loop, if there is a better way tell me
+        let mut created_servers: Vec<Server> = Vec::new();
+        let mut existing_servers: Vec<String> = Vec::new();
 
         for sv in data.servers {
-            if let Some(sv_existing) = self.items.get_mut(&sv.ip) {
-                existing.remove(&sv.ip);
+            if let Some(sv_existing) = existing.get_mut(&sv.ip) {
+                existing_servers.push(sv.ip.clone());
 
                 // if calculate_hash(&sv_existing.data) != calculate_hash(&sv) {
                 //     sv_existing.updated = true;
@@ -87,14 +92,35 @@ impl ServersState {
                 sv_existing.offline = false;
                 sv_existing.data = sv;
             } else {
-                self.items.insert(sv.ip.clone(), Server::new(&sv));
+                created_servers.push(Server::new(&sv));
                 locations.write().await.resolve(IP::Remote(sv.ip)).await?;
             }
         }
 
-        for ip in existing.keys() {
-            self.items.get_mut(ip).unwrap().offline = true;
+        for ip in existing_servers {
+            existing.remove(&ip);
         }
+
+        for sv in existing.values_mut() {
+            sv.offline = true;
+        }
+
+        self.items.append(&mut created_servers);
+
+        // TODO: custom sorts by each field
+        // TODO: search by pattern
+        // sorting priorities:
+        //  - server is online
+        //  - player count
+        //  - server name
+        // https://stackoverflow.com/a/40369685
+        self.items.sort_by(|a, b| match a.offline.cmp(&b.offline) {
+            Ordering::Equal => match a.data.players.cmp(&b.data.players).reverse() {
+                Ordering::Equal => a.data.name.cmp(&b.data.name),
+                other => other,
+            },
+            other => other,
+        });
 
         Ok(())
     }

@@ -1,13 +1,11 @@
-use std::cmp::Ordering;
 use std::io;
 
-use tui::layout::Rect;
-
 use tui::backend::CrosstermBackend;
+use tui::layout::Rect;
 use tui::terminal::Frame;
 
 use crate::app::AppAction;
-use crate::datatypes::server::Server;
+use crate::datatypes::installation::InstallationAction;
 use crate::input::UserInput;
 use crate::states::{AppState, StatelessList};
 use crate::views::{Drawable, InputProcessor};
@@ -35,7 +33,24 @@ impl ServerView {
 #[async_trait::async_trait]
 impl InputProcessor for ServerView {
     async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
-        self.state.on_input(input, app.servers.read().await.count())
+        match input {
+            UserInput::Char('d' | 'D') => {
+                if let Some(i) = self.state.selected() {
+                    let selected = &app.servers.read().await.items[i];
+
+                    app.installations
+                        .read()
+                        .await
+                        .queue
+                        .send(InstallationAction::Install(selected.data.download.clone()))
+                        .expect("cannot send install");
+                    Some(AppAction::Accepted)
+                } else {
+                    None
+                }
+            }
+            _ => self.state.on_input(input, app.servers.read().await.count()),
+        }
     }
 }
 
@@ -49,25 +64,9 @@ impl Drawable for ServerView {
     ) {
         let servers = &app.servers.read().await.items;
 
-        let offline_servers = servers.values().filter(|s| s.offline).count();
+        let offline_servers = servers.iter().filter(|s| s.offline).count();
 
-        let mut servers_to_be_sorted = servers.values().collect::<Vec<&Server>>();
-        // TODO: custom sorts by each field
-        // TODO: search by pattern
-        // sorting priorities:
-        //  - server is online
-        //  - player count
-        //  - server name
-        // https://stackoverflow.com/a/40369685
-        servers_to_be_sorted.sort_by(|a, b| match a.offline.cmp(&b.offline) {
-            Ordering::Equal => match a.data.players.cmp(&b.data.players).reverse() {
-                Ordering::Equal => a.data.name.cmp(&b.data.name),
-                other => other,
-            },
-            other => other,
-        });
-
-        let selected_server = self.state.selected().map(|s| servers_to_be_sorted[s]);
+        let selected_server = self.state.selected().map(|s| &servers[s]);
 
         let chunks = Layout::default()
             .constraints([
@@ -77,7 +76,7 @@ impl Drawable for ServerView {
             .direction(Direction::Vertical)
             .split(area);
 
-        let rows = servers_to_be_sorted.iter().map(|s| {
+        let rows = servers.iter().map(|s| {
             let style = if s.offline {
                 Style::default()
                     .fg(Color::Red)
@@ -108,7 +107,7 @@ impl Drawable for ServerView {
             .block(
                 Block::default()
                     .title(Span::styled(
-                        format!("SERVERS {}:{}", servers_to_be_sorted.len(), offline_servers),
+                        format!("SERVERS {}:{}", servers.len(), offline_servers),
                         Style::default().add_modifier(Modifier::BOLD),
                     ))
                     .title_alignment(Alignment::Center)
