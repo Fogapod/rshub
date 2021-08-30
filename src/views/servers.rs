@@ -35,7 +35,7 @@ impl ServerView {
 #[async_trait::async_trait]
 impl InputProcessor for ServerView {
     async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
-        self.state.on_input(input, app.servers.count().await)
+        self.state.on_input(input, app.servers.read().await.count())
     }
 }
 
@@ -47,7 +47,7 @@ impl Drawable for ServerView {
         area: Rect,
         app: &AppState,
     ) {
-        let servers = app.servers.items.read().await;
+        let servers = &app.servers.read().await.items;
 
         let offline_servers = servers.values().filter(|s| s.offline).count();
 
@@ -150,10 +150,19 @@ impl Drawable for ServerView {
                 selected.data.ip,
                 selected.data.port,
             ));
+
+            let selected_location =
+                if let Some(location) = app.locations.read().await.items.get(&selected.ip) {
+                    format!("{}/{}", location.country, location.city)
+                } else {
+                    "unknown".to_owned()
+                };
+
             let text2 = Text::from(format!(
-                r#"fps:  {}
-                   time: {}"#,
-                selected.data.fps, selected.data.time
+                r#"fps:      {}
+                   time:     {}
+                   location: {}"#,
+                selected.data.fps, selected.data.time, selected_location
             ));
 
             let par1 = Paragraph::new(text1)
@@ -201,8 +210,6 @@ impl Drawable for ServerView {
             f.render_widget(par1, chunks[0]);
             f.render_widget(par2, chunks[1]);
         }
-
-        drop(servers);
 
         f.render_stateful_widget(table, chunks[0], &mut self.state.state);
     }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use tokio::sync::RwLock;
 
 use crate::constants::USER_AGENT;
@@ -6,33 +8,33 @@ use crate::datatypes::commit::{Commit, CommitRange};
 const GITHUB_REPO_URL: &str = "https://api.github.com/repos/unitystation/unitystation/commits";
 
 pub struct CommitState {
-    pub items: RwLock<Vec<Commit>>,
+    pub items: Vec<Commit>,
     client: reqwest::Client,
 }
 
 impl CommitState {
-    pub async fn new() -> Self {
+    pub async fn new() -> Arc<RwLock<Self>> {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::ACCEPT,
             "application/vnd.github.v3+json".parse().unwrap(),
         );
 
-        Self {
-            items: RwLock::new(Vec::new()),
+        Arc::new(RwLock::new(Self {
+            items: Vec::new(),
             client: reqwest::Client::builder()
                 .user_agent(USER_AGENT)
                 .default_headers(headers)
                 .build()
                 .expect("creating client"),
-        }
+        }))
     }
 
-    pub async fn count(&self) -> usize {
-        self.items.read().await.len()
+    pub fn count(&self) -> usize {
+        self.items.len()
     }
 
-    pub async fn load(&self) {
+    pub async fn load(&mut self) {
         let req = match self.client.get(GITHUB_REPO_URL).send().await {
             Ok(req) => req,
             Err(err) => {
@@ -54,15 +56,14 @@ impl CommitState {
                 return;
             }
         };
-        if let Err(e) = self.update(resp).await {
+        if let Err(e) = self.update(resp) {
             log::error!("error updating commits: {}", e);
         }
     }
 
-    pub async fn update(&self, data: CommitRange) -> Result<(), Box<dyn std::error::Error>> {
-        let mut commits = self.items.write().await;
-
-        commits.append(&mut data.0.iter().map(Commit::from).collect());
+    pub fn update(&mut self, data: CommitRange) -> Result<(), Box<dyn std::error::Error>> {
+        self.items
+            .append(&mut data.0.iter().map(Commit::from).collect());
 
         Ok(())
     }

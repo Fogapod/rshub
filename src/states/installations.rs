@@ -2,34 +2,34 @@ use std::sync::Arc;
 
 use tokio::sync::{mpsc, RwLock};
 
-use crate::datatypes::installation::Installation;
+use crate::datatypes::installation::{Installation, InstallationAction};
 
 pub struct InstallationsState {
-    pub items: RwLock<Vec<Installation>>,
-    queue: mpsc::UnboundedSender<Installation>,
+    pub items: Vec<Installation>,
+    queue: mpsc::UnboundedSender<InstallationAction>,
 }
 
 impl InstallationsState {
-    pub async fn new() -> Arc<Self> {
+    pub async fn new() -> Arc<RwLock<Self>> {
         let (tx, rx) = mpsc::unbounded_channel();
 
-        let instance = Arc::new(Self {
-            items: RwLock::new(Vec::new()),
+        let instance = Arc::new(RwLock::new(Self {
+            items: Vec::new(),
             queue: tx,
-        });
+        }));
 
-        tokio::task::spawn(Self::rename_me_task(instance.clone(), rx));
+        tokio::task::spawn(Self::installation_handler_task(instance.clone(), rx));
 
         instance
     }
 
-    pub async fn count(&self) -> usize {
-        self.items.read().await.len()
+    pub fn count(&self) -> usize {
+        self.items.len()
     }
 
-    pub async fn rename_me_task(
-        _installations: Arc<InstallationsState>,
-        mut rx: mpsc::UnboundedReceiver<Installation>,
+    pub async fn installation_handler_task(
+        _installations: Arc<RwLock<InstallationsState>>,
+        mut rx: mpsc::UnboundedReceiver<InstallationAction>,
     ) {
         while let Some(installation) = rx.recv().await {
             log::info!("instalaltion event: {:?}", installation);

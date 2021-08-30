@@ -5,59 +5,84 @@ use tokio::sync::{mpsc, RwLock};
 
 use crate::config::AppConfig;
 use crate::constants::USER_AGENT;
-use crate::geolocation::{Location, IP};
+use crate::datatypes::geolocation::{Location, IP};
 
 pub struct LocationsState {
-    pub items: RwLock<HashMap<IP, Location>>,
+    pub items: HashMap<IP, Location>,
     queue: mpsc::UnboundedSender<IP>,
     geo_provider: String,
 }
 
 impl LocationsState {
-    pub async fn new(config: &AppConfig) -> Arc<Self> {
+    pub async fn new(config: &AppConfig) -> Arc<RwLock<Self>> {
         let (tx, rx) = mpsc::unbounded_channel::<IP>();
 
-        let instance = Arc::new(Self {
-            items: RwLock::new(HashMap::new()),
+        let instance = Arc::new(RwLock::new(Self {
+            items: HashMap::new(),
             queue: tx,
             geo_provider: config.args.geo_provider.clone(),
-        });
+        }));
 
         tokio::task::spawn(Self::location_fetch_task(instance.clone(), rx));
 
         instance
     }
 
-    pub async fn resolve(&self, address: IP) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn resolve(&mut self, ip: IP) -> Result<(), Box<dyn std::error::Error>> {
         {
-            if self.items.read().await.get(&address).is_some() {
+            if self.items.get(&ip).is_some() {
                 return Ok(());
             }
         }
 
-        self.queue.send(address)?;
+        self.queue.send(ip)?;
 
         Ok(())
     }
 
-    // pub fn get(&self, address: IP) -> Option<Location> {
-    //     self.locations.read().get(&address).cloned()
-    // }
-
     pub async fn location_fetch_task(
-        locations: Arc<LocationsState>,
+        locations: Arc<RwLock<LocationsState>>,
         mut rx: mpsc::UnboundedReceiver<IP>,
     ) {
-        let client = reqwest::Client::builder()
-            .user_agent(USER_AGENT)
-            .build()
-            .expect("creating client");
+        let client = Arc::new(
+            reqwest::Client::builder()
+                .user_agent(USER_AGENT)
+                .build()
+                .expect("creating client"),
+        );
+
+        let geo_provider = locations.read().await.geo_provider.clone();
 
         while let Some(ip) = rx.recv().await {
-            log::info!("resolving location: {:?}", ip);
-            let location = ip.fetch(&client, &locations.geo_provider).await.unwrap();
+            log::debug!("resolving location: {:?}", ip);
 
-            locations.items.write().await.insert(ip, location);
+            let client = client.clone();
+            let locations = locations.clone();
+            let geo_provider = geo_provider.clone();
+
+            tokio::spawn(async move {
+                let mut request = client.get(format!("{}/json", geo_provider));
+
+                if let IP::Remote(ref ip) = ip {
+                    request = request.query(&[("ip", ip)])
+                }
+
+                let location = request
+                    .send()
+                    .await
+                    .unwrap()
+                    .json::<Location>()
+                    .await
+                    .unwrap();
+
+                log::debug!("resolved location: {:?} -> {:?}", ip, location);
+
+                if location.is_valid() {
+                    locations.write().await.items.insert(ip, location);
+                } else {
+                    log::warn!("bad location");
+                }
+            });
         }
     }
 }

@@ -6,8 +6,8 @@ use tokio::sync::RwLock;
 
 use crate::config::AppConfig;
 use crate::constants::USER_AGENT;
+use crate::datatypes::geolocation::IP;
 use crate::datatypes::server::{Server, ServerListData};
-use crate::geolocation::IP;
 use crate::states::LocationsState;
 
 const SERVER_LIST_URL: &str = "https://api.unitystation.org/serverlist";
@@ -22,19 +22,23 @@ const SERVER_LIST_URL: &str = "https://api.unitystation.org/serverlist";
 // }
 
 pub struct ServersState {
-    pub items: RwLock<HashMap<String, Server>>,
+    pub items: HashMap<String, Server>,
     update_interval: Duration,
 }
 
 const DEBUG_GOOGOL_IP: &str = "8.8.8.8";
 
 impl ServersState {
-    pub async fn new(config: &AppConfig, locations: Arc<LocationsState>) -> Arc<Self> {
-        let items = RwLock::new(HashMap::new());
+    pub async fn new(
+        config: &AppConfig,
+        locations: Arc<RwLock<LocationsState>>,
+    ) -> Arc<RwLock<Self>> {
+        let mut items = HashMap::new();
 
-        items.write().await.insert(
+        items.insert(
             DEBUG_GOOGOL_IP.to_owned(),
             Server {
+                ip: IP::Remote(DEBUG_GOOGOL_IP.to_owned()),
                 offline: true,
                 data: crate::datatypes::server::ServerData {
                     build: 0,
@@ -51,30 +55,29 @@ impl ServersState {
                 },
             },
         );
-        let instance = Arc::new(Self {
+        let instance = Arc::new(RwLock::new(Self {
             items,
             update_interval: Duration::from_secs(config.args.update_interval),
-        });
+        }));
 
         tokio::task::spawn(Self::server_fetch_task(instance.clone(), locations));
 
         instance
     }
 
-    pub async fn count(&self) -> usize {
-        self.items.read().await.len()
+    pub fn count(&self) -> usize {
+        self.items.len()
     }
 
     pub async fn update(
-        &self,
+        &mut self,
         data: ServerListData,
-        locations: Arc<LocationsState>,
+        locations: Arc<RwLock<LocationsState>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut servers = self.items.write().await;
-        let mut existing = servers.clone();
+        let mut existing = self.items.clone();
 
         for sv in data.servers {
-            if let Some(sv_existing) = servers.get_mut(&sv.ip) {
+            if let Some(sv_existing) = self.items.get_mut(&sv.ip) {
                 existing.remove(&sv.ip);
 
                 // if calculate_hash(&sv_existing.data) != calculate_hash(&sv) {
@@ -84,32 +87,38 @@ impl ServersState {
                 sv_existing.offline = false;
                 sv_existing.data = sv;
             } else {
-                servers.insert(sv.ip.clone(), Server::new(&sv));
-                locations.resolve(IP::Remote(sv.ip)).await?;
+                self.items.insert(sv.ip.clone(), Server::new(&sv));
+                locations.write().await.resolve(IP::Remote(sv.ip)).await?;
             }
         }
 
         for ip in existing.keys() {
-            servers.get_mut(ip).unwrap().offline = true;
+            self.items.get_mut(ip).unwrap().offline = true;
         }
 
         Ok(())
     }
 
-    pub async fn server_fetch_task(servers: Arc<ServersState>, locations: Arc<LocationsState>) {
-        let update_interval = servers.update_interval;
+    pub async fn server_fetch_task(
+        servers: Arc<RwLock<ServersState>>,
+        locations: Arc<RwLock<LocationsState>>,
+    ) {
+        let update_interval = servers.read().await.update_interval;
 
         let client = reqwest::Client::builder()
             .user_agent(USER_AGENT)
             .build()
             .expect("creating client");
 
-        if let Err(e) = locations.resolve(IP::Local).await {
+        if let Err(e) = locations.write().await.resolve(IP::Local).await {
             log::error!("error fetching local ip: {}", e);
         }
 
         // debugging
-        let _ = locations.resolve(IP::Remote(DEBUG_GOOGOL_IP.to_owned()));
+        let _ = locations
+            .write()
+            .await
+            .resolve(IP::Remote(DEBUG_GOOGOL_IP.to_owned()));
 
         loop {
             let req = match client.get(SERVER_LIST_URL).send().await {
@@ -133,7 +142,7 @@ impl ServersState {
                     return;
                 }
             };
-            if let Err(e) = servers.update(resp, locations.clone()).await {
+            if let Err(e) = servers.write().await.update(resp, locations.clone()).await {
                 log::error!("error updating servers: {}", e);
             }
 

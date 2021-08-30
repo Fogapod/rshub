@@ -2,7 +2,6 @@ mod app;
 mod config;
 mod constants;
 mod datatypes;
-mod geolocation;
 mod input;
 mod states;
 mod views;
@@ -24,21 +23,32 @@ use crate::config::AppConfig;
 use crate::input::{spawn_input_thread, EventOrTick};
 
 fn setup_panic_hook() {
-    std::panic::set_hook(Box::new(|panic_info| {
-        // cannot show cursor without terminal instance
+    #[cfg(not(debug_assertions))]
+    let original_hook = std::panic::take_hook();
+
+    std::panic::set_hook(Box::new(move |panic_info| {
         cleanup_terminal(None);
 
         #[cfg(debug_assertions)]
-        better_panic::Settings::auto().create_panic_handler()(panic_info);
+        {
+            better_panic::Settings::auto().create_panic_handler()(panic_info);
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            original_hook(panic_info);
+        }
     }));
 }
 
 fn cleanup_terminal(terminal: Option<&mut Terminal<CrosstermBackend<io::Stdout>>>) {
+    disable_raw_mode().unwrap();
+
     let mut stdout = io::stdout();
 
-    disable_raw_mode().unwrap();
     execute!(stdout, LeaveAlternateScreen, DisableMouseCapture).unwrap();
 
+    // without original terminal instance cursor cannot be shown
+    // and leaves terminal in half broken state
     if let Some(terminal) = terminal {
         terminal.show_cursor().unwrap();
     }
@@ -95,6 +105,8 @@ fn _main() -> Result<(), Box<dyn std::error::Error>> {
         Terminal::new(backend)?
     };
 
+    // FIXME: task panic does not kill program in debug mode.
+    // it cleans terminal and prevents ui usage instead
     {
         let rx = spawn_input_thread(Duration::from_millis(200));
 
@@ -121,9 +133,6 @@ fn _main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    #[cfg(debug_assertions)]
-    better_panic::install();
-
     setup_panic_hook();
 
     // TODO: actual error processing

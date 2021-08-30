@@ -28,7 +28,7 @@ impl InstallationView {
 #[async_trait::async_trait]
 impl InputProcessor for InstallationView {
     async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
-        self.state.on_input(input, app.commits.count().await)
+        self.state.on_input(input, app.commits.read().await.count())
     }
 }
 

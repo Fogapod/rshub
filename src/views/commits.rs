@@ -15,7 +15,9 @@ use crate::states::{AppState, StatelessList};
 use crate::views::{Drawable, InputProcessor};
 
 pub struct CommitView {
-    // FIXME: dynamic commits somehow
+    // TODO:
+    //   - on 1st launch: fetch N latest commits, save latest hash
+    //   - on 2nd launch: read latest hash and fetch newer commits
     loaded: bool,
 
     state: StatelessList<ListState>,
@@ -33,7 +35,7 @@ impl CommitView {
 #[async_trait::async_trait]
 impl InputProcessor for CommitView {
     async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
-        self.state.on_input(input, app.commits.count().await)
+        self.state.on_input(input, app.commits.read().await.count())
     }
 }
 
@@ -50,7 +52,7 @@ impl Drawable for CommitView {
             .constraints([Constraint::Length(50), Constraint::Min(0)])
             .split(area);
 
-        let commits = app.commits.items.read().await;
+        let commits = &app.commits.read().await.items;
 
         let items: Vec<ListItem> = commits
             .iter()
@@ -85,12 +87,10 @@ impl Drawable for CommitView {
             );
         }
 
-        drop(commits);
-
         if !self.loaded {
             let commits = app.commits.clone();
 
-            tokio::task::spawn(async move { commits.load().await });
+            tokio::task::spawn(async move { commits.write().await.load().await });
 
             self.loaded = true;
         }

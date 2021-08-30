@@ -18,7 +18,7 @@ use futures::stream::{self, StreamExt};
 
 use crate::app::AppAction;
 
-use crate::geolocation::IP;
+use crate::datatypes::geolocation::IP;
 use crate::input::UserInput;
 use crate::states::{AppState, StatelessList};
 use crate::views::{
@@ -40,12 +40,12 @@ impl Tab {
             Self::Servers => {
                 let servers = &app.servers;
 
-                format!("servers [{}]", servers.count().await)
+                format!("servers [{}]", servers.read().await.count())
             }
             Self::Installations => {
                 let installations = &app.installations;
 
-                format!("installations [{}]", installations.count().await)
+                format!("installations [{}]", installations.read().await.count())
             }
             Self::Commits => "commits".to_owned(),
             Self::Map => "temp map".to_owned(),
@@ -218,8 +218,8 @@ impl Drawable for TabView {
 // TODO: render selected with labels by default, all without labels
 // TODO: zoom and map navigation
 async fn draw_map(f: &mut Frame<'_, CrosstermBackend<io::Stdout>>, area: Rect, app: &AppState) {
-    let locations = app.locations.items.read().await;
-    let servers = app.servers.items.read().await;
+    let locations = &app.locations.read().await.items;
+    let servers = &app.servers.read().await.items;
 
     let map = Canvas::default()
         .block(Block::default().borders(Borders::ALL))
@@ -254,6 +254,7 @@ async fn draw_map(f: &mut Frame<'_, CrosstermBackend<io::Stdout>>, area: Rect, a
                 );
             }
 
+            // separate loop to draw on top of lines
             for sv in servers.values() {
                 if let Some(location) = locations.get(&IP::Remote(sv.data.ip.clone())) {
                     let color = if sv.data.players != 0 {

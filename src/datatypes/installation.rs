@@ -1,7 +1,15 @@
-use std::path::PathBuf;
+type Url = String;
 
 #[derive(Debug)]
-pub enum Installation {
-    Valid { path: PathBuf, version: String },
-    Incomplete { path: PathBuf, version: String },
+pub enum InstallationAction {
+    Install(Url),
+    Uninstall(Url),
+    Delete(Url),
+}
+
+#[derive(Debug)]
+pub struct Installation {
+    fork: String,
+    version: String,
+    size: usize,
 }

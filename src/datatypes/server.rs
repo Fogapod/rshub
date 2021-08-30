@@ -1,6 +1,8 @@
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
+use crate::datatypes::geolocation::IP;
+
 fn deserialize_ok_or_default<'de, T, D>(deserializer: D) -> Result<T, D::Error>
 where
     T: Deserialize<'de> + Default,
@@ -108,12 +110,14 @@ pub struct Server {
     // ui update skip optimization
     // pub updated: bool,
     pub offline: bool,
+    pub ip: IP,
 }
 
 impl Server {
     pub fn new(data: &ServerData) -> Self {
         Self {
-            data: data.clone(),
+            ip: IP::Remote(data.ip.clone()),
+            data: data.to_owned(),
             // updated: true,
             offline: false,
         }

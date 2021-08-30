@@ -1,14 +1,16 @@
 use std::sync::Arc;
 
+use tokio::sync::RwLock;
+
 use crate::config::AppConfig;
 use crate::states::{CommitState, InstallationsState, LocationsState, ServersState};
 
 pub struct AppState {
     pub config: AppConfig,
-    pub commits: Arc<CommitState>,
-    pub installations: Arc<InstallationsState>,
-    pub locations: Arc<LocationsState>,
-    pub servers: Arc<ServersState>,
+    pub commits: Arc<RwLock<CommitState>>,
+    pub installations: Arc<RwLock<InstallationsState>>,
+    pub locations: Arc<RwLock<LocationsState>>,
+    pub servers: Arc<RwLock<ServersState>>,
 }
 
 impl AppState {
@@ -17,7 +19,7 @@ impl AppState {
         let servers = ServersState::new(&config, locations.clone()).await;
 
         Self {
-            commits: Arc::new(CommitState::new().await),
+            commits: CommitState::new().await,
             installations: InstallationsState::new().await,
             locations,
             servers,
