@@ -73,7 +73,10 @@ const fn verbosity_to_log_level(verbosity: u32) -> LevelFilter {
     }
 }
 fn setup_logger(config: &AppConfig) -> Result<(), io::Error> {
-    simple_logging::log_to_file(&config.log_file, verbosity_to_log_level(config.verbose))
+    simple_logging::log_to_file(
+        &config.dirs.log_file,
+        verbosity_to_log_level(config.verbose),
+    )
 }
 
 fn _main() -> Result<(), Box<dyn std::error::Error>> {

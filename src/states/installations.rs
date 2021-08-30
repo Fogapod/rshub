@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use tokio::fs;
 use tokio::sync::{mpsc, RwLock};
 
 use crate::config::AppConfig;
@@ -17,7 +18,7 @@ pub struct InstallationsState {
 
 impl InstallationsState {
     pub async fn new(
-        _: &AppConfig,
+        app: &AppConfig,
         managed_tasks: &mut Vec<tokio::task::JoinHandle<()>>,
     ) -> Arc<RwLock<Self>> {
         let (tx, rx) = mpsc::unbounded_channel();
@@ -26,6 +27,11 @@ impl InstallationsState {
             items: HashMap::new(),
             queue: tx,
         }));
+
+        managed_tasks.push(tokio::task::spawn(Self::fs_installation_finder_task(
+            app.clone(),
+            instance.clone(),
+        )));
 
         managed_tasks.push(tokio::task::spawn(Self::installation_handler_task(
             instance.clone(),
@@ -39,7 +45,44 @@ impl InstallationsState {
         self.items.len()
     }
 
-    pub async fn installation_handler_task(
+    async fn fs_installation_finder_task(app: AppConfig, installations: Arc<RwLock<Self>>) {
+        log::debug!(
+            "installation directory: {}",
+            &app.dirs.installations_dir.display()
+        );
+
+        let mut dirs = fs::read_dir(app.dirs.installations_dir)
+            .await
+            .expect("reading installations directory");
+
+        while let Some(dir) = dirs
+            .next_entry()
+            .await
+            .expect("reading installations directory files")
+        {
+            let path = dir.path();
+
+            if !path.is_dir() {
+                log::warn!("not a directory: {}", path.display());
+
+                continue;
+            }
+
+            let installation = Installation::try_from_dir(&path)
+                .await
+                .expect("scanning instllation");
+
+            log::info!("found installation: {:?}", &installation);
+
+            installations
+                .write()
+                .await
+                .items
+                .insert(installation.version.clone(), installation);
+        }
+    }
+
+    async fn installation_handler_task(
         installations: Arc<RwLock<Self>>,
         mut rx: mpsc::UnboundedReceiver<InstallationAction>,
     ) {
@@ -49,7 +92,7 @@ impl InstallationsState {
             .expect("creating client");
 
         while let Some(action) = rx.recv().await {
-            log::info!("instalaltion action: {:?}", action);
+            log::info!("installation action: {:?}", action);
 
             match action {
                 InstallationAction::VersionDiscovered { new, old } => {
@@ -102,7 +145,8 @@ impl InstallationsState {
                         },
                     );
                 }
-                _ => {}
+                InstallationAction::Uninstall(_) => {}
+                InstallationAction::InstallCancel(_) => {}
             }
         }
     }

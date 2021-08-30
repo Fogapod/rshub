@@ -20,21 +20,11 @@ where
     Ok(deserialized.unwrap_or_default())
 }
 
-// because server names allow newlines
-fn deserialize_remove_newlines<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s: String = deserialize_ok_or_default(deserializer)?;
-
-    Ok(s.replace('\n', " "))
-}
-
 #[derive(Debug, Clone, Deserialize, Hash)]
 #[serde(default)]
 pub struct ServerData {
     #[serde(rename = "ServerName")]
-    #[serde(deserialize_with = "deserialize_remove_newlines")]
+    #[serde(deserialize_with = "deserialize_ok_or_default")]
     pub name: String,
     #[serde(rename = "ForkName")]
     #[serde(deserialize_with = "deserialize_ok_or_default")]
@@ -129,7 +119,7 @@ impl DownloadUrl {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct GameVersion {
     pub fork: String,
-    pub build: u32,
+    pub build: String,
     pub download: DownloadUrl,
 }
 
@@ -144,7 +134,7 @@ impl GameVersion {
 
         Self {
             fork,
-            build,
+            build: build.to_string(),
             download: DownloadUrl::new(&download),
         }
     }
@@ -199,7 +189,7 @@ impl Server {
         } = data;
 
         Self {
-            name,
+            name: name.replace('\n', " "),
             map,
             gamemode,
             time,

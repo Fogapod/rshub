@@ -57,12 +57,13 @@ impl Drawable for InstallationView {
                     "{}-{} {}",
                     i.version.fork,
                     i.version.build,
-                    match i.kind {
+                    match &i.kind {
                         InstallationKind::Discovered => "discovered".to_owned(),
                         InstallationKind::Downloading { progress, total } => {
                             format!("downloading {}/{}", progress, total)
                         }
-                        InstallationKind::Installed => "installed".to_owned(),
+                        InstallationKind::Installed(size) => format!("installed: {} bytes", size),
+                        InstallationKind::Corrupted(reason) => format!("corrupted: {}", reason),
                         InstallationKind::Unpacking => "unpacking".to_owned(),
                     }
                 ))

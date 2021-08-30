@@ -46,7 +46,7 @@ impl LocationsState {
         Ok(())
     }
 
-    pub async fn location_fetch_task(
+    async fn location_fetch_task(
         locations: Arc<RwLock<Self>>,
         mut rx: mpsc::UnboundedReceiver<IP>,
     ) {

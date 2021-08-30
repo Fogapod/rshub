@@ -24,34 +24,22 @@ struct CliArgs {
     geo_provider: reqwest::Url,
 }
 
-#[derive(Debug)]
-pub struct AppConfig {
+#[derive(Debug, Clone)]
+pub struct AppDirs {
     pub log_file: PathBuf,
-    pub update_interval: u64,
-    pub verbose: u32,
-    pub geo_provider: reqwest::Url,
 
     pub data_dir: PathBuf,
+    pub installations_dir: PathBuf,
 }
 
-// TODO: rotate by count or date or something
-fn default_log_path(data_dir: &Path) -> PathBuf {
-    data_dir.join(format!("{}.log", env!("CARGO_PKG_NAME")))
-}
-
-impl AppConfig {
-    pub fn new() -> Result<Self, io::Error> {
+impl AppDirs {
+    fn new(log_file: Option<PathBuf>) -> Result<Self, io::Error> {
         let data_dir = Self::get_data_dir()?;
 
-        let args = CliArgs::parse();
-
         Ok(Self {
-            data_dir: data_dir.clone(),
-
-            update_interval: args.update_interval,
-            verbose: args.verbose,
-            geo_provider: args.geo_provider,
-            log_file: args.log_file.unwrap_or_else(|| default_log_path(&data_dir)),
+            log_file: log_file.unwrap_or_else(|| Self::default_log_path(&data_dir)),
+            installations_dir: Self::get_installations_dir(data_dir.clone())?,
+            data_dir,
         })
     }
 
@@ -63,5 +51,42 @@ impl AppConfig {
         fs::create_dir_all(&data)?;
 
         Ok(data)
+    }
+
+    fn get_installations_dir(mut data_dir: PathBuf) -> Result<PathBuf, io::Error> {
+        data_dir.push("installations");
+
+        fs::create_dir_all(&data_dir)?;
+
+        Ok(data_dir)
+    }
+
+    fn default_log_path(data_dir: &Path) -> PathBuf {
+        data_dir.join(format!("{}.log", env!("CARGO_PKG_NAME")))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AppConfig {
+    pub update_interval: u64,
+    pub verbose: u32,
+    pub geo_provider: reqwest::Url,
+
+    pub dirs: AppDirs,
+}
+
+// TODO: rotate by count or date or something
+
+impl AppConfig {
+    pub fn new() -> Result<Self, io::Error> {
+        let args = CliArgs::parse();
+
+        Ok(Self {
+            dirs: AppDirs::new(args.log_file)?,
+
+            update_interval: args.update_interval,
+            verbose: args.verbose,
+            geo_provider: args.geo_provider,
+        })
     }
 }

@@ -39,7 +39,7 @@ impl ServersState {
             ip: IP::Remote(DEBUG_GOOGOL_IP.to_owned()),
             offline: true,
             version: GameVersion {
-                build: 0,
+                build: "0".to_owned(),
                 fork: "origin".to_owned(),
                 download: DownloadUrl::new("https://evil.exploit"),
             },
@@ -155,7 +155,7 @@ impl ServersState {
         Ok(())
     }
 
-    pub async fn server_fetch_task(
+    async fn server_fetch_task(
         servers: Arc<RwLock<Self>>,
         locations: Arc<RwLock<LocationsState>>,
         installations: Arc<RwLock<InstallationsState>>,
