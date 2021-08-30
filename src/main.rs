@@ -72,15 +72,7 @@ const fn verbosity_to_log_level(verbosity: u32) -> LevelFilter {
     }
 }
 fn setup_logger(config: &AppConfig) -> Result<(), io::Error> {
-    simple_logging::log_to_file(
-        config.args.log_file.clone().unwrap_or_else(|| {
-            config
-                .data_dir
-                // TODO: rotate by count or date or something
-                .join(format!("{}.log", env!("CARGO_PKG_NAME")))
-        }),
-        verbosity_to_log_level(config.args.verbose),
-    )
+    simple_logging::log_to_file(&config.log_file, verbosity_to_log_level(config.verbose))
 }
 
 fn _main() -> Result<(), Box<dyn std::error::Error>> {

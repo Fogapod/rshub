@@ -20,7 +20,7 @@ impl LocationsState {
         let instance = Arc::new(RwLock::new(Self {
             items: HashMap::new(),
             queue: tx,
-            geo_provider: config.args.geo_provider.clone(),
+            geo_provider: config.geo_provider.clone(),
         }));
 
         tokio::task::spawn(Self::location_fetch_task(instance.clone(), rx));

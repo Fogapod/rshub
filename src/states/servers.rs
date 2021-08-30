@@ -54,7 +54,7 @@ impl ServersState {
 
         let instance = Arc::new(RwLock::new(Self {
             items,
-            update_interval: Duration::from_secs(config.args.update_interval),
+            update_interval: Duration::from_secs(config.update_interval),
         }));
 
         tokio::task::spawn(Self::server_fetch_task(instance.clone(), locations));

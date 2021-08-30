@@ -1,38 +1,55 @@
 use std::env;
 use std::fs;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::Clap;
 
 #[derive(Clap, Debug)]
 #[clap(version = clap::crate_version!(), about = "UnityStation server hub")]
-pub struct AppArgs {
+struct CliArgs {
     /// Log file path
     #[clap(short, long)]
-    pub log_file: Option<PathBuf>,
+    log_file: Option<PathBuf>,
     /// Server list update interval, in seconds
     #[clap(short, long, default_value = "20")]
-    pub update_interval: u64,
+    update_interval: u64,
     /// A level of verbosity, and can be used multiple times
     #[clap(short, long, parse(from_occurrences))]
-    pub verbose: u32,
+    verbose: u32,
     /// Geolocation provider (ifconfig.co compatible)
     #[clap(long, default_value = "https://ifconfig.based.computer")]
-    pub geo_provider: String,
+    geo_provider: String,
 }
 
 #[derive(Debug)]
 pub struct AppConfig {
-    pub args: AppArgs,
+    pub log_file: PathBuf,
+    pub update_interval: u64,
+    pub verbose: u32,
+    pub geo_provider: String,
+
     pub data_dir: PathBuf,
+}
+
+// TODO: rotate by count or date or something
+fn default_log_path(data_dir: &Path) -> PathBuf {
+    data_dir.join(format!("{}.log", env!("CARGO_PKG_NAME")))
 }
 
 impl AppConfig {
     pub fn new() -> Result<Self, io::Error> {
+        let data_dir = Self::get_data_dir()?;
+
+        let args = CliArgs::parse();
+
         Ok(Self {
-            args: AppArgs::parse(),
-            data_dir: Self::get_data_dir()?,
+            data_dir: data_dir.clone(),
+
+            update_interval: args.update_interval,
+            verbose: args.verbose,
+            geo_provider: args.geo_provider,
+            log_file: args.log_file.unwrap_or_else(|| default_log_path(&data_dir)),
         })
     }
 
