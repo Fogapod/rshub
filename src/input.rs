@@ -20,6 +20,8 @@ pub enum UserInput<'a> {
     Delete,
     // misc
     Tab,
+    Help,
+    Refresh,
     // custom
     Char(&'a char),
 }

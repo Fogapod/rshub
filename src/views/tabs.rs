@@ -7,7 +7,7 @@ use tui::{
     style::{Color, Modifier, Style},
     symbols,
     symbols::DOT,
-    text::{Spans, Text},
+    text::{Span, Spans},
     widgets::canvas::{Canvas, Line, Map, MapResolution},
     widgets::BorderType,
     widgets::{Block, Borders, ListState, Paragraph, Tabs, Wrap},
@@ -161,47 +161,56 @@ impl Drawable for TabView {
             .constraints([Constraint::Length(1), Constraint::Min(0)].as_ref())
             .split(area);
 
-        let header_chunks = Layout::default()
+        let version_text = Spans::from(vec![
+            Span::styled(
+                "F1 for help ",
+                Style::default().add_modifier(Modifier::ITALIC),
+            ),
+            Span::from(format!(
+                "{} {}-{}",
+                DOT,
+                env!("CARGO_PKG_NAME"),
+                env!("CARGO_PKG_VERSION")
+            )),
+        ]);
+
+        let header = Layout::default()
             .direction(Direction::Horizontal)
-            // TODO: figure out how to give tabs higher priority, drawing on top of name
-            .constraints([Constraint::Min(0), Constraint::Length(25)])
+            .constraints([
+                Constraint::Min(0),
+                Constraint::Length(version_text.width() as u16),
+            ])
             .split(chunks[0]);
 
-        let paragraph = Paragraph::new(Text::from(format!(
-            // NOTE: space at the end to prevent italic text go off screen
-            // normal space is getting trimmed, so have to use this weird one
-            "{}-{}\u{00a0}",
-            env!("CARGO_PKG_NAME"),
-            env!("CARGO_PKG_VERSION")
-        )))
-        .alignment(Alignment::Right)
-        .style(
-            Style::default()
-                .fg(Color::DarkGray)
-                .add_modifier(Modifier::ITALIC | Modifier::BOLD),
-        )
-        .wrap(Wrap { trim: false });
+        f.render_widget(
+            Paragraph::new(version_text)
+                .alignment(Alignment::Right)
+                .style(
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .wrap(Wrap { trim: false }),
+            header[1],
+        );
 
-        f.render_widget(paragraph, header_chunks[1]);
-
-        let titles = stream::iter(Tab::all())
+        let tabs = stream::iter(Tab::all())
             .then(|t| async move { Spans::from(t.name(app).await) })
             .collect()
             .await;
 
-        let selected = self.state.selected().unwrap_or(0);
-
-        let tabs = Tabs::new(titles)
-            .block(Block::default().border_type(BorderType::Plain))
-            .highlight_style(
-                Style::default()
-                    .fg(Color::Blue)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .divider(DOT)
-            .select(selected);
-
-        f.render_widget(tabs, header_chunks[0]);
+        f.render_widget(
+            Tabs::new(tabs)
+                .block(Block::default().border_type(BorderType::Plain))
+                .highlight_style(
+                    Style::default()
+                        .fg(Color::Blue)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .divider(DOT)
+                .select(self.state.selected().unwrap_or_default()),
+            header[0],
+        );
 
         // cannot move this to function because of match limitation for arms
         // even if they implement same trait

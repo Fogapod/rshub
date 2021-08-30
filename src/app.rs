@@ -101,6 +101,14 @@ impl App {
                 KeyEvent {
                     code: KeyCode::Tab, ..
                 } => Some(UserInput::Tab),
+                KeyEvent {
+                    code: KeyCode::F(1),
+                    ..
+                } => Some(UserInput::Help),
+                KeyEvent {
+                    code: KeyCode::F(5),
+                    ..
+                } => Some(UserInput::Refresh),
                 _ => None,
             },
             Event::Mouse(mouse) => match mouse.kind {
