@@ -244,7 +244,7 @@ async fn draw_map(f: &mut Frame<'_, CrosstermBackend<io::Stdout>>, area: Rect, a
 
             if let Some(user_location) = locations.get(&IP::Local) {
                 for sv in servers {
-                    if let Some(location) = locations.get(&IP::Remote(sv.data.ip.clone())) {
+                    if let Some(location) = locations.get(&sv.ip) {
                         ctx.draw(&Line {
                             x1: user_location.longitude,
                             y1: user_location.latitude,
@@ -265,8 +265,8 @@ async fn draw_map(f: &mut Frame<'_, CrosstermBackend<io::Stdout>>, area: Rect, a
 
             // separate loop to draw on top of lines
             for sv in servers {
-                if let Some(location) = locations.get(&IP::Remote(sv.data.ip.clone())) {
-                    let color = if sv.data.players != 0 {
+                if let Some(location) = locations.get(&sv.ip) {
+                    let color = if sv.players != 0 {
                         Color::Green
                     } else {
                         Color::Red

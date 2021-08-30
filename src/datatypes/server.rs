@@ -99,6 +99,30 @@ impl Default for ServerData {
     }
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct GameVersion {
+    pub fork: String,
+    pub build: u32,
+    pub download: String,
+}
+
+impl GameVersion {
+    pub fn new(data: ServerData) -> Self {
+        let ServerData {
+            fork,
+            build,
+            download,
+            ..
+        } = data;
+
+        Self {
+            fork,
+            build,
+            download,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ServerListData {
     pub servers: Vec<ServerData>,
@@ -106,18 +130,43 @@ pub struct ServerListData {
 
 #[derive(Debug, Clone)]
 pub struct Server {
-    pub data: ServerData,
+    pub name: String,
+    pub players: u32,
+    pub version: GameVersion,
+    pub ip: IP,
+    pub port: u32,
+    pub map: String,
+    pub gamemode: String,
+    pub time: String,
+    pub fps: u32,
     // ui update skip optimization
     // pub updated: bool,
     pub offline: bool,
-    pub ip: IP,
 }
 
 impl Server {
-    pub fn new(data: &ServerData) -> Self {
+    pub fn new(ip: IP, version: GameVersion, data: ServerData) -> Self {
+        let ServerData {
+            name,
+            map,
+            gamemode,
+            time,
+            players,
+            port,
+            fps,
+            ..
+        } = data;
+
         Self {
-            ip: IP::Remote(data.ip.clone()),
-            data: data.to_owned(),
+            name,
+            map,
+            gamemode,
+            time,
+            players,
+            port,
+            fps,
+            ip,
+            version,
             // updated: true,
             offline: false,
         }

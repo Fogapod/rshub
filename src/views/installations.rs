@@ -2,13 +2,15 @@ use std::io;
 
 use tui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Layout, Rect},
-    widgets::{Block, Borders, ListState},
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
+    widgets::{Block, Borders, List, ListItem, ListState},
     Frame,
 };
 
 use crate::app::AppAction;
 
+use crate::datatypes::installation::InstallationKind;
 use crate::input::UserInput;
 use crate::states::{AppState, StatelessList};
 use crate::views::{Drawable, InputProcessor};
@@ -28,7 +30,8 @@ impl InstallationView {
 #[async_trait::async_trait]
 impl InputProcessor for InstallationView {
     async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
-        self.state.on_input(input, app.commits.read().await.count())
+        self.state
+            .on_input(input, app.installations.read().await.count())
     }
 }
 
@@ -38,14 +41,38 @@ impl Drawable for InstallationView {
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
         area: Rect,
-        _: &AppState,
+        app: &AppState,
     ) {
         let chunks = Layout::default()
-            .constraints(vec![Constraint::Percentage(100)])
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(100)])
             .split(area);
 
-        let block = Block::default().borders(Borders::ALL).title("WIP");
+        let installations = &app.installations.read().await.items;
 
-        f.render_widget(block, chunks[0]);
+        let items: Vec<ListItem> = installations
+            .values()
+            .map(|i| {
+                ListItem::new(format!(
+                    "{}-{} {}",
+                    i.version.fork,
+                    i.version.build,
+                    match i.kind {
+                        InstallationKind::Discovered => "discovered".to_owned(),
+                        InstallationKind::Downloading { progress, total } => {
+                            format!("downloading {}/{}", progress, total)
+                        }
+                        InstallationKind::Installed => "installed".to_owned(),
+                        InstallationKind::Unpacking => "unpacking".to_owned(),
+                    }
+                ))
+            })
+            .collect();
+
+        let list = List::new(items)
+            .block(Block::default().borders(Borders::ALL))
+            .highlight_style(Style::default().bg(Color::DarkGray));
+
+        f.render_stateful_widget(list, chunks[0], &mut self.state.state);
     }
 }

@@ -42,7 +42,7 @@ impl InputProcessor for ServerView {
                         .read()
                         .await
                         .queue
-                        .send(InstallationAction::Install(selected.data.download.clone()))
+                        .send(InstallationAction::Install(selected.version.clone()))
                         .expect("cannot send install");
                     Some(AppAction::Accepted)
                 } else {
@@ -81,17 +81,17 @@ impl Drawable for ServerView {
                 Style::default()
                     .fg(Color::Red)
                     .add_modifier(Modifier::RAPID_BLINK | Modifier::CROSSED_OUT)
-            } else if s.data.players == 0 {
+            } else if s.players == 0 {
                 Style::default().fg(Color::Yellow)
             } else {
                 Style::default().fg(Color::Green)
             };
 
             Row::new(vec![
-                s.data.name.clone(),
-                s.data.build.to_string(),
-                s.data.map.clone(),
-                s.data.players.to_string(),
+                s.name.clone(),
+                s.version.build.to_string(),
+                s.map.clone(),
+                s.players.to_string(),
             ])
             .style(style)
         });
@@ -142,12 +142,12 @@ impl Drawable for ServerView {
                 r#"version: {} {}
                    map:     {} ({})
                    address: {}:{}"#,
-                selected.data.fork,
-                selected.data.build,
-                selected.data.map,
-                selected.data.gamemode,
-                selected.data.ip,
-                selected.data.port,
+                selected.version.fork,
+                selected.version.build,
+                selected.map,
+                selected.gamemode,
+                selected.ip,
+                selected.port,
             ));
 
             let selected_location =
@@ -161,7 +161,7 @@ impl Drawable for ServerView {
                 r#"fps:      {}
                    time:     {}
                    location: {}"#,
-                selected.data.fps, selected.data.time, selected_location
+                selected.fps, selected.time, selected_location
             ));
 
             let par1 = Paragraph::new(text1)
@@ -171,7 +171,7 @@ impl Drawable for ServerView {
                         .border_style(border_style)
                         .title(Spans::from(vec![
                             Span::styled(
-                                format!(" {}", selected.data.name),
+                                format!(" {}", selected.name),
                                 Style::default()
                                     .add_modifier(Modifier::BOLD)
                                     .fg(Color::Blue),
@@ -192,9 +192,9 @@ impl Drawable for ServerView {
                         .borders(Borders::ALL - Borders::LEFT)
                         .border_style(border_style)
                         .title(Span::styled(
-                            format!("{} ", selected.data.players),
+                            format!("{} ", selected.players),
                             Style::default().add_modifier(Modifier::BOLD).fg(
-                                if selected.data.players > 0 {
+                                if selected.players > 0 {
                                     Color::Green
                                 } else {
                                     Color::Red

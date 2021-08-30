@@ -16,11 +16,12 @@ pub struct AppState {
 impl AppState {
     pub async fn new(config: AppConfig) -> Self {
         let locations = LocationsState::new(&config).await;
-        let servers = ServersState::new(&config, locations.clone()).await;
+        let installations = InstallationsState::new().await;
+        let servers = ServersState::new(&config, locations.clone(), installations.clone()).await;
 
         Self {
             commits: CommitState::new().await,
-            installations: InstallationsState::new().await,
+            installations,
             locations,
             servers,
             config,

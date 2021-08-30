@@ -1,15 +1,26 @@
-type Url = String;
+use crate::datatypes::server::GameVersion;
 
 #[derive(Debug)]
 pub enum InstallationAction {
-    Install(Url),
-    Uninstall(Url),
-    Delete(Url),
+    VersionDiscovered {
+        new: GameVersion,
+        old: Option<GameVersion>,
+    },
+    Install(GameVersion),
+    Uninstall(GameVersion),
+}
+
+#[derive(Debug)]
+pub enum InstallationKind {
+    Discovered,
+    Installed,
+    // Corrupted,
+    Downloading { progress: usize, total: usize },
+    Unpacking,
 }
 
 #[derive(Debug)]
 pub struct Installation {
-    fork: String,
-    version: String,
-    size: usize,
+    pub version: GameVersion,
+    pub kind: InstallationKind,
 }

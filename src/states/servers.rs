@@ -7,9 +7,9 @@ use tokio::sync::RwLock;
 
 use crate::config::AppConfig;
 use crate::constants::USER_AGENT;
-use crate::datatypes::geolocation::IP;
-use crate::datatypes::server::{Server, ServerListData};
-use crate::states::LocationsState;
+use crate::datatypes::server::{GameVersion, Server, ServerListData};
+use crate::datatypes::{geolocation::IP, installation::InstallationAction};
+use crate::states::{InstallationsState, LocationsState};
 
 const SERVER_LIST_URL: &str = "https://api.unitystation.org/serverlist";
 
@@ -33,23 +33,23 @@ impl ServersState {
     pub async fn new(
         config: &AppConfig,
         locations: Arc<RwLock<LocationsState>>,
+        installations: Arc<RwLock<InstallationsState>>,
     ) -> Arc<RwLock<Self>> {
         let items = vec![Server {
             ip: IP::Remote(DEBUG_GOOGOL_IP.to_owned()),
             offline: true,
-            data: crate::datatypes::server::ServerData {
+            version: GameVersion {
                 build: 0,
-                download: "none".to_owned(),
                 fork: "origin".to_owned(),
-                fps: 42,
-                time: "13:37".to_owned(),
-                gamemode: "FFA".to_owned(),
-                players: 7,
-                map: "world".to_owned(),
-                ip: DEBUG_GOOGOL_IP.to_owned(),
-                name: "googol".to_owned(),
-                port: 22,
+                download: "none".to_owned(),
             },
+            fps: 42,
+            time: "13:37".to_owned(),
+            gamemode: "FFA".to_owned(),
+            players: 7,
+            map: "world".to_owned(),
+            name: "googol".to_owned(),
+            port: 22,
         }];
 
         let instance = Arc::new(RwLock::new(Self {
@@ -57,7 +57,11 @@ impl ServersState {
             update_interval: Duration::from_secs(config.update_interval),
         }));
 
-        tokio::task::spawn(Self::server_fetch_task(instance.clone(), locations));
+        tokio::task::spawn(Self::server_fetch_task(
+            instance.clone(),
+            locations,
+            installations,
+        ));
 
         instance
     }
@@ -70,30 +74,56 @@ impl ServersState {
         &mut self,
         data: ServerListData,
         locations: Arc<RwLock<LocationsState>>,
+        installations: Arc<RwLock<InstallationsState>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut existing: HashMap<String, &mut Server> = self
-            .items
-            .iter_mut()
-            .map(|i| (i.data.ip.clone(), i))
-            .collect();
+        let mut existing: HashMap<IP, &mut Server> =
+            self.items.iter_mut().map(|i| (i.ip.clone(), i)).collect();
 
         // avoid borrow issues in loop, if there is a better way tell me
         let mut created_servers: Vec<Server> = Vec::new();
-        let mut existing_servers: Vec<String> = Vec::new();
+        let mut existing_servers: Vec<IP> = Vec::new();
 
         for sv in data.servers {
-            if let Some(sv_existing) = existing.get_mut(&sv.ip) {
-                existing_servers.push(sv.ip.clone());
+            let ip = IP::Remote(sv.ip.clone());
+            let version = GameVersion::new(sv.clone());
+
+            if let Some(sv_existing) = existing.get_mut(&ip) {
+                // version changed (download/build/fork)
+                if sv_existing.version != version {
+                    installations
+                        .read()
+                        .await
+                        .queue
+                        .send(InstallationAction::VersionDiscovered {
+                            new: version.clone(),
+                            old: Some(sv_existing.version.clone()),
+                        })
+                        .unwrap();
+                }
+
+                existing_servers.push(ip);
 
                 // if calculate_hash(&sv_existing.data) != calculate_hash(&sv) {
                 //     sv_existing.updated = true;
                 // }
 
                 sv_existing.offline = false;
-                sv_existing.data = sv;
+                // sv_existing.data = sv;
             } else {
-                created_servers.push(Server::new(&sv));
-                locations.write().await.resolve(IP::Remote(sv.ip)).await?;
+                let server = Server::new(ip.clone(), version, sv);
+
+                installations
+                    .read()
+                    .await
+                    .queue
+                    .send(InstallationAction::VersionDiscovered {
+                        new: server.version.clone(),
+                        old: None,
+                    })
+                    .unwrap();
+
+                created_servers.push(server);
+                locations.write().await.resolve(ip).await?;
             }
         }
 
@@ -115,8 +145,8 @@ impl ServersState {
         //  - server name
         // https://stackoverflow.com/a/40369685
         self.items.sort_by(|a, b| match a.offline.cmp(&b.offline) {
-            Ordering::Equal => match a.data.players.cmp(&b.data.players).reverse() {
-                Ordering::Equal => a.data.name.cmp(&b.data.name),
+            Ordering::Equal => match a.players.cmp(&b.players).reverse() {
+                Ordering::Equal => a.name.cmp(&b.name),
                 other => other,
             },
             other => other,
@@ -128,6 +158,7 @@ impl ServersState {
     pub async fn server_fetch_task(
         servers: Arc<RwLock<ServersState>>,
         locations: Arc<RwLock<LocationsState>>,
+        installations: Arc<RwLock<InstallationsState>>,
     ) {
         let update_interval = servers.read().await.update_interval;
 
@@ -168,7 +199,12 @@ impl ServersState {
                     return;
                 }
             };
-            if let Err(e) = servers.write().await.update(resp, locations.clone()).await {
+            if let Err(e) = servers
+                .write()
+                .await
+                .update(resp, locations.clone(), installations.clone())
+                .await
+            {
                 log::error!("error updating servers: {}", e);
             }
 

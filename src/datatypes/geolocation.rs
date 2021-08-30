@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::Deserialize;
 
 #[derive(Hash, PartialEq, Eq, Debug, Clone)]
@@ -29,5 +31,14 @@ pub struct Location {
 impl Location {
     pub fn is_valid(&self) -> bool {
         !(self.longitude.is_nan() || self.latitude.is_nan())
+    }
+}
+
+impl fmt::Display for IP {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Local => write!(f, "127.0.0.1"),
+            Self::Remote(ip) => write!(f, "{}", ip),
+        }
     }
 }
