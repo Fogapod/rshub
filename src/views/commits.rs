@@ -11,7 +11,7 @@ use tui::{
 
 use crate::app::AppAction;
 use crate::input::UserInput;
-use crate::states::{AppState, StatelessList};
+use crate::states::{AppState, CommitState, StatelessList};
 use crate::views::{Drawable, InputProcessor};
 
 pub struct CommitView {
@@ -104,9 +104,7 @@ impl Drawable for CommitView {
         }
 
         if !self.loaded {
-            let commits = app.commits.clone();
-
-            tokio::task::spawn(async move { commits.write().await.load().await });
+            tokio::task::spawn(CommitState::load(app.commits.clone()));
 
             self.loaded = true;
         }

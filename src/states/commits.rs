@@ -34,8 +34,15 @@ impl CommitState {
         self.items.len()
     }
 
-    pub async fn load(&mut self) {
-        let req = match self.client.get(GITHUB_REPO_URL).send().await {
+    pub async fn load(commits: Arc<RwLock<Self>>) {
+        let req = match commits
+            .read()
+            .await
+            .client
+            .get(GITHUB_REPO_URL)
+            .send()
+            .await
+        {
             Ok(req) => req,
             Err(err) => {
                 log::error!("error creating request: {}", err);
@@ -56,7 +63,7 @@ impl CommitState {
                 return;
             }
         };
-        if let Err(e) = self.update(resp) {
+        if let Err(e) = commits.write().await.update(resp) {
             log::error!("error updating commits: {}", e);
         }
     }
