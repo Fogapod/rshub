@@ -1,11 +1,14 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use futures::future::try_join_all;
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
+use tokio::task::JoinHandle;
 
 use crate::config::AppConfig;
 use crate::states::{CommitState, InstallationsState, LocationsState, ServersState};
+
+pub type TaskResult = Result<(), Box<dyn std::error::Error + Send>>;
+pub type TaskQueue = Arc<RwLock<mpsc::UnboundedSender<JoinHandle<TaskResult>>>>;
 
 pub struct AppState {
     pub config: AppConfig,
@@ -13,23 +16,27 @@ pub struct AppState {
     pub installations: Arc<RwLock<InstallationsState>>,
     pub locations: Arc<RwLock<LocationsState>>,
     pub servers: Arc<RwLock<ServersState>>,
+
+    pub tasks: TaskQueue,
 }
 
 impl AppState {
     pub async fn new(config: AppConfig, panic_bool: Arc<AtomicBool>) -> Arc<Self> {
-        let mut managed_tasks = Vec::new();
+        let (tx, rx) = mpsc::unbounded_channel();
 
-        let locations = LocationsState::new(&config, &mut managed_tasks).await;
-        let installations = InstallationsState::new(&config, &mut managed_tasks).await;
+        let tasks = Arc::new(RwLock::new(tx));
+
+        let locations = LocationsState::new(&config, tasks.clone()).await;
+        let installations = InstallationsState::new(&config, tasks.clone()).await;
         let servers = ServersState::new(
             &config,
-            &mut managed_tasks,
+            tasks.clone(),
             locations.clone(),
             installations.clone(),
         )
         .await;
 
-        tokio::spawn(Self::panic_watcher_super_task(panic_bool, managed_tasks));
+        tokio::spawn(Self::panic_watcher_super_task(panic_bool, rx));
 
         Arc::new(Self {
             commits: CommitState::new().await,
@@ -37,19 +44,31 @@ impl AppState {
             locations,
             servers,
             config,
+            tasks,
         })
     }
 
     async fn panic_watcher_super_task(
-        panicked: Arc<AtomicBool>,
-        tasks: Vec<tokio::task::JoinHandle<()>>,
+        panic_bool: Arc<AtomicBool>,
+        mut recv: mpsc::UnboundedReceiver<JoinHandle<TaskResult>>,
     ) {
-        if let Err(err) = try_join_all(tasks).await {
-            log::error!("super task task error: {:?}", &err);
+        while let Some(task) = recv.recv().await {
+            let panic_bool = panic_bool.clone();
 
-            if err.is_panic() {
-                panicked.store(true, Ordering::Relaxed);
-            }
+            tokio::spawn(async move {
+                if let Err(err) = task.await {
+                    log::warn!("super task task error: {:?}", &err);
+
+                    if err.is_panic() {
+                        log::error!("error is panic, setting panic to exit on next tick");
+                        panic_bool.store(true, Ordering::Relaxed);
+                    }
+
+                    // TODO: handle other errors
+                }
+            });
         }
+
+        log::info!("task channel closed");
     }
 }

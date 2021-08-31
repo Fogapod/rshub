@@ -2,6 +2,7 @@ mod app;
 mod config;
 mod constants;
 mod datatypes;
+mod errors;
 mod input;
 mod states;
 mod views;
@@ -46,10 +47,10 @@ fn cleanup_terminal(terminal: Option<&mut Terminal<CrosstermBackend<io::Stdout>>
 
     let mut stdout = io::stdout();
 
+    // FIXME: if mouse is outside terminal, it is not released properly and garbage
+    // is printed after panic
     execute!(stdout, LeaveAlternateScreen, DisableMouseCapture).unwrap();
 
-    // without original terminal instance cursor cannot be shown
-    // and leaves terminal in half broken state
     if let Some(terminal) = terminal {
         terminal.show_cursor().unwrap();
     }
@@ -101,8 +102,6 @@ fn _main() -> Result<(), Box<dyn std::error::Error>> {
         Terminal::new(backend)?
     };
 
-    // FIXME: task panic does not kill program in debug mode.
-    // it cleans terminal and prevents ui usage instead
     {
         let rx = spawn_input_thread(Duration::from_millis(200));
 
@@ -119,17 +118,20 @@ fn _main() -> Result<(), Box<dyn std::error::Error>> {
 
             if app.stopped {
                 log::info!("app stopped, cleaning up");
+
+                cleanup_terminal(Some(&mut terminal));
+
                 break;
             }
 
             if app.panicked.load(Ordering::Relaxed) {
+                // IMPORTANT: do not cleanup terminal, this is done in panic hook
                 log::error!("app panicked, cleaning up");
+
                 break;
             }
         }
     }
-
-    cleanup_terminal(Some(&mut terminal));
 
     Ok(())
 }

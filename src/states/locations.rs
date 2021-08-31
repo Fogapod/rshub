@@ -6,6 +6,7 @@ use tokio::sync::{mpsc, RwLock};
 use crate::config::AppConfig;
 use crate::constants::USER_AGENT;
 use crate::datatypes::geolocation::{Location, IP};
+use crate::states::app::{TaskQueue, TaskResult};
 
 pub struct LocationsState {
     pub items: HashMap<IP, Location>,
@@ -14,10 +15,7 @@ pub struct LocationsState {
 }
 
 impl LocationsState {
-    pub async fn new(
-        config: &AppConfig,
-        managed_tasks: &mut Vec<tokio::task::JoinHandle<()>>,
-    ) -> Arc<RwLock<Self>> {
+    pub async fn new(config: &AppConfig, tasks: TaskQueue) -> Arc<RwLock<Self>> {
         let (tx, rx) = mpsc::unbounded_channel::<IP>();
 
         let instance = Arc::new(RwLock::new(Self {
@@ -26,10 +24,14 @@ impl LocationsState {
             geo_provider: config.geo_provider.clone(),
         }));
 
-        managed_tasks.push(tokio::task::spawn(Self::location_fetch_task(
-            instance.clone(),
-            rx,
-        )));
+        tasks
+            .read()
+            .await
+            .send(tokio::task::spawn(Self::location_fetch_task(
+                instance.clone(),
+                rx,
+            )))
+            .expect("spawn location task");
 
         instance
     }
@@ -49,7 +51,7 @@ impl LocationsState {
     async fn location_fetch_task(
         locations: Arc<RwLock<Self>>,
         mut rx: mpsc::UnboundedReceiver<IP>,
-    ) {
+    ) -> TaskResult {
         let client = Arc::new(
             reqwest::Client::builder()
                 .user_agent(USER_AGENT)
@@ -104,5 +106,7 @@ impl LocationsState {
                 }
             });
         }
+
+        Ok(())
     }
 }

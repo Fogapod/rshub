@@ -64,7 +64,23 @@ impl Drawable for ServerView {
     ) {
         let servers = &app.servers.read().await.items;
 
-        let offline_servers = servers.iter().filter(|s| s.offline).count();
+        let mut count_online = 0;
+        let mut count_no_players = 0;
+        let mut count_offline = 0;
+
+        let mut count_players = 0;
+
+        for s in servers {
+            count_players += s.players;
+
+            if s.offline {
+                count_offline += 1;
+            } else if s.players == 0 {
+                count_no_players += 1;
+            } else {
+                count_online += 1;
+            }
+        }
 
         let selected_server = self.state.selected().map(|s| &servers[s]);
 
@@ -76,29 +92,59 @@ impl Drawable for ServerView {
             .direction(Direction::Vertical)
             .split(area);
 
-        let rows = servers.iter().map(|s| {
-            let style = if s.offline {
-                Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(Modifier::RAPID_BLINK | Modifier::CROSSED_OUT)
-            } else if s.players == 0 {
-                Style::default().fg(Color::Yellow)
-            } else {
-                Style::default().fg(Color::Green)
-            };
+        // "BUILD".len()
+        let mut longest_build_name = 5;
+        let mut longest_map_name = 3;
 
-            Row::new(vec![
-                s.name.clone(),
-                s.version.build.to_string(),
-                s.map.clone(),
-                s.players.to_string(),
-            ])
-            .style(style)
-        });
+        let rows: Vec<Row> = servers
+            .iter()
+            .map(|s| {
+                if s.version.build.len() > longest_build_name {
+                    longest_build_name = s.version.build.len();
+                }
+                if s.map.len() > longest_map_name {
+                    longest_map_name = s.map.len();
+                }
+
+                let style = if s.offline {
+                    Style::default()
+                        .fg(Color::Red)
+                        .add_modifier(Modifier::RAPID_BLINK | Modifier::CROSSED_OUT)
+                } else if s.players == 0 {
+                    Style::default().fg(Color::Yellow)
+                } else {
+                    Style::default().fg(Color::Green)
+                };
+
+                Row::new(vec![
+                    s.name.clone(),
+                    s.version.build.clone(),
+                    s.map.clone(),
+                    s.players.to_string(),
+                ])
+                .style(style)
+            })
+            .collect();
+
+        let pop_header = format!("POP [{}]", count_players);
+
+        let widths = [
+            Constraint::Percentage(60),
+            Constraint::Length(longest_build_name as u16),
+            // until https://github.com/fdehau/tui-rs/issues/525 is fixed
+            Constraint::Length(longest_map_name as u16),
+            Constraint::Length(pop_header.len() as u16),
+        ];
 
         let table = Table::new(rows)
             .header(
-                Row::new(vec!["NAME", "BUILD", "MAP", "PLAYERS"]).style(
+                Row::new(vec![
+                    "NAME".to_owned(),
+                    "BUILD".to_owned(),
+                    "MAP".to_owned(),
+                    pop_header,
+                ])
+                .style(
                     Style::default()
                         .fg(Color::Blue)
                         .add_modifier(Modifier::BOLD),
@@ -106,19 +152,34 @@ impl Drawable for ServerView {
             )
             .block(
                 Block::default()
-                    .title(Span::styled(
-                        format!("SERVERS {}:{}", servers.len(), offline_servers),
-                        Style::default().add_modifier(Modifier::BOLD),
-                    ))
+                    .title(Spans::from(vec![
+                        Span::styled(
+                            format!("SERVERS {} ", DOT,),
+                            Style::default().add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            count_online.to_string(),
+                            Style::default()
+                                .add_modifier(Modifier::BOLD)
+                                .fg(Color::Green),
+                        ),
+                        Span::styled("-", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            count_no_players.to_string(),
+                            Style::default()
+                                .add_modifier(Modifier::BOLD)
+                                .fg(Color::Yellow),
+                        ),
+                        Span::styled("-", Style::default().add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            count_offline.to_string(),
+                            Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
+                        ),
+                    ]))
                     .title_alignment(Alignment::Center)
                     .borders(Borders::ALL),
             )
-            .widths(&[
-                Constraint::Percentage(45),
-                Constraint::Percentage(15),
-                Constraint::Percentage(25),
-                Constraint::Percentage(15),
-            ])
+            .widths(&widths)
             .highlight_style(
                 Style::default()
                     .bg(Color::DarkGray)
@@ -134,6 +195,8 @@ impl Drawable for ServerView {
 
             let border_style = Style::default().fg(if selected.offline {
                 Color::Red
+            } else if selected.players == 0 {
+                Color::Yellow
             } else {
                 Color::White
             });

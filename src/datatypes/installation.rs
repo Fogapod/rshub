@@ -1,4 +1,4 @@
-use std::io;
+use std::cmp::Ordering;
 use std::path::Path;
 
 use tokio::fs;
@@ -16,26 +16,22 @@ pub enum InstallationAction {
     Uninstall(GameVersion),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstallationKind {
     Discovered,
-    Installed(u64),
-    Corrupted(String),
+    Installed { size: u64 },
     Downloading { progress: usize, total: usize },
     Unpacking,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Installation {
     pub version: GameVersion,
     pub kind: InstallationKind,
 }
 
 impl Installation {
-    pub async fn try_from_dir(dir: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        // FIXME: ugly hack
-        let download = DownloadUrl::Invalid("[local]".to_owned());
-
+    pub async fn try_from_dir(dir: &Path) -> Option<Self> {
         let fork = dir
             .file_name()
             .expect("expected non empty path")
@@ -58,31 +54,38 @@ impl Installation {
             }
         }
 
-        return Ok(if let Some(build_dir) = build_dir {
-            Self {
-                version: GameVersion {
+        if let Some(build_dir) = build_dir {
+            return Some(Self {
+                version: GameVersion::new(
                     fork,
-                    build: build_dir
+                    build_dir
                         .file_name()
                         .expect("expected non empty path")
                         .to_str()
                         .expect("bad directory ending")
                         .to_owned(),
-                    download,
-                },
-                kind: InstallationKind::Installed(
-                    fs::metadata(build_dir).await.expect("read metadata").len(),
+                    DownloadUrl::Local,
                 ),
-            }
-        } else {
-            Self {
-                version: GameVersion {
-                    fork,
-                    build: "[not found]".to_owned(),
-                    download,
+                kind: InstallationKind::Installed {
+                    size: fs::metadata(build_dir).await.expect("read metadata").len(),
                 },
-                kind: InstallationKind::Corrupted("No build directory".to_owned()),
-            }
-        });
+            });
+        }
+
+        log::warn!("fork {}: no build directory", fork);
+
+        None
+    }
+}
+
+impl PartialOrd for Installation {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Installation {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.version.cmp(&other.version)
     }
 }

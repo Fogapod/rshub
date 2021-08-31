@@ -44,7 +44,7 @@ impl Tab {
                 format!("installations [{}]", app.installations.read().await.count())
             }
             Self::Commits => format!("commits [{}]", app.commits.read().await.items.len()),
-            Self::Map => "temp map".to_owned(),
+            Self::Map => "do not open".to_owned(),
         }
     }
 

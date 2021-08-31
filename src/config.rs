@@ -62,6 +62,7 @@ impl AppDirs {
     }
 
     fn default_log_path(data_dir: &Path) -> PathBuf {
+        // TODO: rotate by count or date or something
         data_dir.join(format!("{}.log", env!("CARGO_PKG_NAME")))
     }
 }
@@ -74,8 +75,6 @@ pub struct AppConfig {
 
     pub dirs: AppDirs,
 }
-
-// TODO: rotate by count or date or something
 
 impl AppConfig {
     pub fn new() -> Result<Self, io::Error> {

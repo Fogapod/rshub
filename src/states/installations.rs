@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::fs;
@@ -9,43 +8,74 @@ use crate::constants::USER_AGENT;
 use crate::datatypes::{
     installation::{Installation, InstallationAction, InstallationKind},
     server::{DownloadUrl, GameVersion},
+    value_sorted_map::ValueSortedMap,
 };
+use crate::states::app::{TaskQueue, TaskResult};
 
 pub struct InstallationsState {
-    pub items: HashMap<GameVersion, Installation>,
+    pub items: ValueSortedMap<GameVersion, Installation>,
     pub queue: mpsc::UnboundedSender<InstallationAction>,
+    pub install_dir_error: Option<String>,
+    tasks: TaskQueue,
 }
 
 impl InstallationsState {
-    pub async fn new(
-        app: &AppConfig,
-        managed_tasks: &mut Vec<tokio::task::JoinHandle<()>>,
-    ) -> Arc<RwLock<Self>> {
+    pub async fn new(app: &AppConfig, tasks: TaskQueue) -> Arc<RwLock<Self>> {
         let (tx, rx) = mpsc::unbounded_channel();
 
         let instance = Arc::new(RwLock::new(Self {
-            items: HashMap::new(),
+            items: ValueSortedMap::new(),
             queue: tx,
+            install_dir_error: None,
+            tasks: tasks.clone(),
         }));
 
-        managed_tasks.push(tokio::task::spawn(Self::fs_installation_finder_task(
-            app.clone(),
-            instance.clone(),
-        )));
+        let tasks = tasks.read().await;
 
-        managed_tasks.push(tokio::task::spawn(Self::installation_handler_task(
-            instance.clone(),
-            rx,
-        )));
+        tasks
+            .send(tokio::task::spawn(Self::installation_handler_task(
+                instance.clone(),
+                rx,
+            )))
+            .expect("spawn installation finder task");
+
+        Self::spawn_installation_finder(app, instance.clone()).await;
 
         instance
+    }
+
+    pub async fn spawn_installation_finder(app: &AppConfig, installations: Arc<RwLock<Self>>) {
+        let mut self_ = installations.write().await;
+
+        self_.items.retain(|i| {
+            !matches!(
+                i,
+                Installation {
+                    kind: InstallationKind::Installed { .. },
+                    ..
+                }
+            )
+        });
+
+        self_
+            .tasks
+            .read()
+            .await
+            .send(tokio::task::spawn(Self::fs_installation_finder_task(
+                app.to_owned(),
+                installations.clone(),
+            )))
+            .expect("spawn installation handler task");
     }
 
     pub fn count(&self) -> usize {
         self.items.len()
     }
 
-    async fn fs_installation_finder_task(app: AppConfig, installations: Arc<RwLock<Self>>) {
+    async fn fs_installation_finder_task(
+        app: AppConfig,
+        installations: Arc<RwLock<Self>>,
+    ) -> TaskResult {
         log::debug!(
             "installation directory: {}",
             &app.dirs.installations_dir.display()
@@ -68,9 +98,10 @@ impl InstallationsState {
                 continue;
             }
 
-            let installation = Installation::try_from_dir(&path)
-                .await
-                .expect("scanning instllation");
+            let installation = match Installation::try_from_dir(&path).await {
+                Some(installation) => installation,
+                None => continue,
+            };
 
             log::info!("found installation: {:?}", &installation);
 
@@ -80,12 +111,14 @@ impl InstallationsState {
                 .items
                 .insert(installation.version.clone(), installation);
         }
+
+        Ok(())
     }
 
     async fn installation_handler_task(
         installations: Arc<RwLock<Self>>,
         mut rx: mpsc::UnboundedReceiver<InstallationAction>,
-    ) {
+    ) -> TaskResult {
         let _ = reqwest::Client::builder()
             .user_agent(USER_AGENT)
             .build()
@@ -96,19 +129,19 @@ impl InstallationsState {
 
             match action {
                 InstallationAction::VersionDiscovered { new, old } => {
-                    let items = &mut installations.write().await.items;
+                    let mut installations = installations.write().await;
 
-                    if let Some(old) = old {
-                        if let Some(existing) = items.get(&old) {
+                    if let Some(old_version) = old {
+                        if let Some(existing) = installations.items.get(&old_version).cloned() {
                             // we are replacing old with new only in case it was not
                             // installed or is not being installed
-                            if let InstallationKind::Discovered = existing.kind {
-                                items.remove(&old);
+                            if let InstallationKind::Discovered = &existing.kind {
+                                installations.items.remove_value(&existing);
                             }
                         }
                     }
 
-                    items.insert(
+                    installations.items.insert(
                         new.clone(),
                         Installation {
                             version: new,
@@ -130,6 +163,10 @@ impl InstallationsState {
                             log::warn!("not downloading invalid content: {}", bad);
                             continue;
                         }
+                        DownloadUrl::Local => {
+                            log::warn!("attempted to download local version");
+                            continue;
+                        }
                     };
 
                     log::info!("installing: {} ({})", &version, &String::from(url.clone()));
@@ -139,7 +176,7 @@ impl InstallationsState {
                         Installation {
                             version,
                             kind: InstallationKind::Downloading {
-                                progress: 1,
+                                progress: 69,
                                 total: 100,
                             },
                         },
@@ -149,5 +186,7 @@ impl InstallationsState {
                 InstallationAction::InstallCancel(_) => {}
             }
         }
+
+        Ok(())
     }
 }
