@@ -169,18 +169,49 @@ impl InstallationsState {
                         }
                     };
 
+                    match installations.read().await.items.get(&version) {
+                        Some(Installation {
+                            kind: InstallationKind::Discovered,
+                            ..
+                        })
+                        | None => {}
+                        _ => {
+                            log::warn!(
+                                "installation state: not discovered, ignoring install request"
+                            );
+
+                            continue;
+                        }
+                    }
+
                     log::info!("installing: {} ({})", &version, &String::from(url.clone()));
 
-                    installations.write().await.items.insert(
-                        version.clone(),
-                        Installation {
-                            version,
-                            kind: InstallationKind::Downloading {
-                                progress: 69,
-                                total: 100,
+                    let installations = installations.clone();
+                    tokio::spawn(async move {
+                        for progress in 0..100 {
+                            let version = version.clone();
+                            installations.write().await.items.insert(
+                                version.clone(),
+                                Installation {
+                                    version,
+                                    kind: InstallationKind::Downloading {
+                                        progress,
+                                        total: 100,
+                                    },
+                                },
+                            );
+
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        }
+
+                        installations.write().await.items.insert(
+                            version.clone(),
+                            Installation {
+                                version,
+                                kind: InstallationKind::Discovered,
                             },
-                        },
-                    );
+                        )
+                    });
                 }
                 InstallationAction::Uninstall(_) => {}
                 InstallationAction::InstallCancel(_) => {}

@@ -30,14 +30,14 @@ async-trait = "0.1.51"
 [dependencies.tokio]
 version = "1"
 default-features = false
-features = ["rt-multi-thread", "sync", "fs", "process"]
+features = ["rt-multi-thread", "sync", "fs", "process", "macros"]
 
 [dependencies.futures]
 version = "0.3.16"
 default-features = false
 
 [dependencies.tui]
-version = "0.16.0"
+version = "0.16"
 default-features = false
 features = ["crossterm"]
 

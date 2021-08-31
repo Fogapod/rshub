@@ -2,8 +2,9 @@ use std::io;
 
 use tui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
+    text::Span,
     widgets::{Block, Borders, Gauge, Row, Table, TableState},
     Frame,
 };
@@ -53,12 +54,9 @@ impl Drawable for InstallationView {
         area: Rect,
         app: &AppState,
     ) {
-        let chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(100)])
-            .split(area);
-
         let installations = &app.installations.read().await.items;
+
+        let mut downloading = Vec::new();
 
         let items: Vec<Row> = installations
             .iter()
@@ -78,6 +76,7 @@ impl Drawable for InstallationView {
                             )
                         }
                         InstallationKind::Downloading { progress, total } => {
+                            downloading.push((i.version.clone(), *progress as f64, *total as f64));
                             format!("downloading {}/{}", progress, total)
                         }
                         InstallationKind::Installed { .. } => "installed".to_owned(),
@@ -91,6 +90,18 @@ impl Drawable for InstallationView {
                 ])
             })
             .collect();
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(0),
+                Constraint::Length(if !downloading.is_empty() {
+                    2 + downloading.len() as u16
+                } else {
+                    0
+                }),
+            ])
+            .split(area);
 
         let table = Table::new(items)
             .header(
@@ -118,5 +129,33 @@ impl Drawable for InstallationView {
             );
 
         f.render_stateful_widget(table, chunks[0], &mut self.state.state);
+
+        if !downloading.is_empty() {
+            for download in downloading {
+                let ratio = download.1 / download.2;
+                let label = Span::styled(
+                    format!("{}: {:.2}%", download.0, ratio * 100.0),
+                    Style::default().fg(Color::Black),
+                );
+
+                let gauge = Gauge::default()
+                    .block(
+                        Block::default()
+                            .title("DOWNLOADS")
+                            .title_alignment(Alignment::Center)
+                            .borders(Borders::ALL),
+                    )
+                    .ratio(ratio)
+                    .label(label)
+                    .gauge_style(
+                        Style::default()
+                            .fg(Color::Green)
+                            .bg(Color::Red)
+                            .add_modifier(Modifier::ITALIC | Modifier::BOLD),
+                    );
+
+                f.render_widget(gauge, chunks[1])
+            }
+        }
     }
 }
