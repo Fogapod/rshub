@@ -1,6 +1,12 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
+use bytesize::ByteSize;
+
+use futures::stream::StreamExt;
+
 use tokio::fs;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::{mpsc, RwLock};
 
 use crate::config::AppConfig;
@@ -121,95 +127,209 @@ impl InstallationsState {
 
             match action {
                 InstallationAction::VersionDiscovered { new, old } => {
-                    let mut installations = app.installations.write().await;
-
-                    if let Some(old_version) = old {
-                        if let Some(existing) = installations.items.get(&old_version).cloned() {
-                            // we are replacing old with new only in case it was not
-                            // installed or is not being installed
-                            if let InstallationKind::Discovered = &existing.kind {
-                                installations.items.remove_value(&existing);
-                            }
-                        }
-                    }
-
-                    installations.items.insert(
-                        new.clone(),
-                        Installation {
-                            version: new,
-                            kind: InstallationKind::Discovered,
-                        },
-                    );
+                    Self::version_discovered(app.clone(), new, old).await;
                 }
-                InstallationAction::Install(version) => {
-                    let url = match &version.download {
-                        DownloadUrl::Valid(url) => url,
-                        DownloadUrl::Untrusted(bad) => {
-                            log::warn!(
-                                "not downloading untrusted content: {}",
-                                String::from(bad.to_owned())
-                            );
-                            continue;
-                        }
-                        DownloadUrl::Invalid(bad) => {
-                            log::warn!("not downloading invalid content: {}", bad);
-                            continue;
-                        }
-                        DownloadUrl::Local => {
-                            log::warn!("attempted to download local version");
-                            continue;
-                        }
-                    };
-
-                    match app.installations.read().await.items.get(&version) {
-                        Some(Installation {
-                            kind: InstallationKind::Discovered,
-                            ..
-                        })
-                        | None => {}
-                        _ => {
-                            log::warn!(
-                                "installation state: not discovered, ignoring install request"
-                            );
-
-                            continue;
-                        }
-                    }
-
-                    log::info!("installing: {} ({})", &version, &String::from(url.clone()));
-
-                    let installations = app.installations.clone();
-                    tokio::spawn(async move {
-                        for progress in 0..=42 {
-                            let version = version.clone();
-                            installations.write().await.items.insert(
-                                version.clone(),
-                                Installation {
-                                    version,
-                                    kind: InstallationKind::Downloading {
-                                        progress,
-                                        total: 42,
-                                    },
-                                },
-                            );
-
-                            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-                        }
-
-                        installations.write().await.items.insert(
-                            version.clone(),
-                            Installation {
-                                version,
-                                kind: InstallationKind::Discovered,
-                            },
-                        )
-                    });
+                InstallationAction::Install(version) => Self::install(app.clone(), version).await,
+                InstallationAction::AbortInstall(version) => {
+                    Self::abort_installation(app.clone(), version).await
                 }
-                InstallationAction::Uninstall(_) => {}
-                InstallationAction::InstallCancel(_) => {}
+                InstallationAction::Uninstall(version) => {
+                    Self::uninstall(app.clone(), version).await
+                }
             }
         }
 
         Ok(())
+    }
+
+    async fn version_discovered(app: Arc<AppState>, new: GameVersion, old: Option<GameVersion>) {
+        let mut installations = app.installations.write().await;
+
+        if let Some(old_version) = old {
+            if let Some(existing) = installations.items.get(&old_version).cloned() {
+                // we are replacing old with new only in case it was not
+                // installed or is not being installed
+                if let InstallationKind::Discovered = &existing.kind {
+                    installations.items.remove_value(&existing);
+                }
+            }
+        }
+
+        installations.items.insert(
+            new.clone(),
+            Installation {
+                version: new,
+                kind: InstallationKind::Discovered,
+            },
+        );
+    }
+
+    async fn install(app: Arc<AppState>, version: GameVersion) {
+        let url = match &version.download {
+            DownloadUrl::Valid(url) => url,
+            DownloadUrl::Untrusted(bad) => {
+                log::warn!(
+                    "not downloading untrusted content: {}",
+                    String::from(bad.to_owned())
+                );
+                return;
+            }
+            DownloadUrl::Invalid(bad) => {
+                log::warn!("not downloading invalid content: {}", bad);
+                return;
+            }
+            DownloadUrl::Local => {
+                log::warn!("attempted to download local version");
+                return;
+            }
+        }
+        .to_owned();
+
+        match app.installations.read().await.items.get(&version) {
+            Some(Installation {
+                kind: InstallationKind::Discovered,
+                ..
+            })
+            | None => {}
+            _ => {
+                log::warn!("installation state: not discovered, ignoring install request");
+
+                return;
+            }
+        }
+
+        log::info!("installing: {} ({})", &version, &String::from(url.clone()));
+
+        let installations = app.installations.clone();
+
+        tokio::spawn(async move {
+            let response = app
+                .client
+                .get(url.clone())
+                .send()
+                .await
+                .expect("download failed");
+
+            let total = response
+                .content_length()
+                .expect("TODO: missing content length");
+
+            let mut path = app.config.dirs.installations_dir.clone();
+
+            path.push(PathBuf::from(version.clone()));
+
+            fs::create_dir_all(&path)
+                .await
+                .expect("TODO: folder creation failed");
+
+            path.push("data.zip");
+
+            let mut file = fs::File::create(path.clone())
+                .await
+                .expect("TODO: file creation failed");
+
+            let mut stream = response.bytes_stream();
+
+            let mut progress = 0;
+            // TODO: cancelation check
+            while let Some(item) = stream.next().await {
+                let chunk = match item {
+                    Ok(chunk) => chunk,
+                    Err(err) => {
+                        log::error!("failed to read next chunk: {}", err);
+                        return;
+                    }
+                };
+
+                if let Err(err) = file.write(&chunk).await {
+                    log::error!("failed to write chunk: {}", err);
+                    return;
+                }
+
+                progress += chunk.len();
+
+                installations.write().await.items.insert(
+                    version.clone(),
+                    Installation {
+                        version: version.clone(),
+                        kind: InstallationKind::Downloading {
+                            progress: progress as u64,
+                            total,
+                        },
+                    },
+                );
+            }
+
+            installations.write().await.items.insert(
+                version.clone(),
+                Installation {
+                    version: version.clone(),
+                    kind: InstallationKind::Unpacking,
+                },
+            );
+
+            drop(file);
+
+            let path_cloned = path.clone();
+            tokio::task::spawn_blocking(move || {
+                zip::read::ZipArchive::new(
+                    std::fs::File::open(path_cloned.clone()).expect("cannot open zip file"),
+                )
+                .expect("cannot open archive")
+                .extract(path_cloned.parent().unwrap())
+                .expect("cannot extract")
+            })
+            .await
+            .expect("something broke");
+
+            installations.write().await.items.insert(
+                version.clone(),
+                Installation {
+                    version: version.clone(),
+                    kind: InstallationKind::Installed {
+                        size: ByteSize::b(total),
+                    },
+                },
+            );
+
+            fs::remove_file(path).await.expect("cannot delete zip");
+        });
+    }
+
+    async fn abort_installation(_: Arc<AppState>, _: GameVersion) {
+        todo!();
+        // app.installations.write().await.items.insert(
+        //     version.clone(),
+        //     Installation {
+        //         version,
+        //         kind: InstallationKind::Discovered,
+        //     },
+        // );
+    }
+
+    async fn uninstall(app: Arc<AppState>, version: GameVersion) {
+        let mut path = app.config.dirs.installations_dir.clone();
+
+        path.push(PathBuf::from(version.clone()));
+
+        // lock in advance
+        let mut installations = app.installations.write().await;
+
+        match installations.items.get(&version) {
+            Some(Installation {
+                kind: InstallationKind::Installed { .. },
+                ..
+            }) => {}
+            _ => {
+                log::error!("not installed, nothing to remove");
+                return;
+            }
+        }
+
+        fs::remove_dir_all(path)
+            .await
+            .expect("TODO: removal failed");
+
+        installations.items.remove(&version);
     }
 }

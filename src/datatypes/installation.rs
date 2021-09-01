@@ -15,7 +15,7 @@ pub enum InstallationAction {
         old: Option<GameVersion>,
     },
     Install(GameVersion),
-    InstallCancel(GameVersion),
+    AbortInstall(GameVersion),
     Uninstall(GameVersion),
 }
 

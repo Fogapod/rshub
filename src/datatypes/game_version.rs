@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 
 use crate::datatypes::server::ServerData;
 
@@ -30,7 +32,7 @@ impl DownloadUrl {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct GameVersion {
     pub fork: String,
     // expose string version for easier forward compatibility.
@@ -64,7 +66,8 @@ impl From<ServerData> for GameVersion {
 
         Self {
             fork,
-            build: build.to_string(),
+            // replace / because build is used to make path
+            build: build.to_string().replace('/', ""),
             build_u32: build,
             download: DownloadUrl::new(&download),
         }
@@ -83,12 +86,29 @@ impl fmt::Display for GameVersion {
     }
 }
 
+impl Hash for GameVersion {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.fork.hash(state);
+        self.build.hash(state);
+        self.download.hash(state);
+    }
+}
+
+impl PartialEq for GameVersion {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for GameVersion {}
+
 impl PartialOrd for GameVersion {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
+// FIXME: while it can be useful to involve url in sorting, it creates duplicates
 impl Ord for GameVersion {
     fn cmp(&self, other: &Self) -> Ordering {
         let ordering = match (&self.download, &other.download) {
@@ -117,6 +137,7 @@ impl Ord for GameVersion {
         } else {
             ordering
         }
+        .reverse()
 
         // implementation without internal u32 hint
         //
@@ -129,5 +150,11 @@ impl Ord for GameVersion {
         // } else {
         //     Ordering::Equal
         // }
+    }
+}
+
+impl From<GameVersion> for PathBuf {
+    fn from(version: GameVersion) -> Self {
+        PathBuf::from(format!("{}/{}/", version.fork, version.build))
     }
 }

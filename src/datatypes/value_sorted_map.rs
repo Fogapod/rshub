@@ -34,6 +34,14 @@ impl<K: Eq + Hash, V: Ord + Clone> ValueSortedMap<K, V> {
         self.set.retain(f)
     }
 
+    pub fn remove<Q: ?Sized>(&mut self, k: &Q)
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.map.remove(k).map(|v| self.set.remove(&v));
+    }
+
     pub fn remove_value<Q: ?Sized>(&mut self, value: &Q) -> bool
     where
         V: Borrow<Q> + Ord + PartialEq<Q>,

@@ -28,6 +28,10 @@ dirs-next = "2.0.0"
 async-trait = "0.1.51"
 bytesize = "1.1.0"
 
+[dependencies.zip]
+version = "0.5.13"
+features = ["deflate"]
+
 [dependencies.tokio]
 version = "1"
 default-features = false

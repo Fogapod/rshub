@@ -13,7 +13,10 @@ use tui::{
 };
 
 use crate::app::AppAction;
-use crate::datatypes::{game_version::DownloadUrl, installation::InstallationKind};
+use crate::datatypes::{
+    game_version::DownloadUrl,
+    installation::{InstallationAction, InstallationKind},
+};
 use crate::input::UserInput;
 use crate::states::{AppState, StatelessList};
 use crate::views::{Drawable, InputProcessor};
@@ -42,6 +45,30 @@ impl InputProcessor for InstallationView {
                     .await;
                 return Some(AppAction::Accepted);
             }
+            UserInput::Char('d' | 'D') => {
+                if let Some(i) = self.state.selected() {
+                    app.installations
+                        .read()
+                        .await
+                        .queue
+                        .send(InstallationAction::Uninstall(
+                            app.installations
+                                .read()
+                                .await
+                                .items
+                                .iter()
+                                // O(n) ...
+                                .nth(i)
+                                .unwrap()
+                                .version
+                                .clone(),
+                        ))
+                        .expect("cannot send uninstall");
+                    Some(AppAction::Accepted)
+                } else {
+                    None
+                }
+            }
             _ => self
                 .state
                 .on_input(input, app.installations.read().await.count()),
@@ -63,7 +90,6 @@ impl Drawable for InstallationView {
 
         let items: Vec<Row> = installations
             .iter()
-            .rev()
             .map(|i| {
                 Row::new(vec![
                     format!("{}-{}", i.version.fork, i.version.build),
@@ -80,7 +106,7 @@ impl Drawable for InstallationView {
                         }
                         InstallationKind::Downloading { progress, total } => {
                             downloading.push((i.version.clone(), *progress as f64, *total as f64));
-                            format!("downloading {}/{}", progress, total)
+                            "downloading".to_owned()
                         }
                         InstallationKind::Installed { .. } => "installed".to_owned(),
                         InstallationKind::Unpacking => "unpacking".to_owned(),
@@ -88,7 +114,7 @@ impl Drawable for InstallationView {
                     match &i.kind {
                         InstallationKind::Installed { size } => size.to_string(),
                         InstallationKind::Downloading { progress, .. } => {
-                            ByteSize::mib(*progress).to_string()
+                            ByteSize::b(*progress).to_string()
                         }
                         _ => "0".to_owned(),
                     },
@@ -139,14 +165,14 @@ impl Drawable for InstallationView {
             for download in downloading {
                 let ratio = download.1 / download.2;
                 let label = Span::styled(
-                    format!("{}: {:.2}%", download.0, ratio * 100.0),
+                    format!("downloading {}: {:.2}%", download.0, ratio * 100.0),
                     Style::default().fg(Color::Black),
                 );
 
                 let gauge = Gauge::default()
                     .block(
                         Block::default()
-                            .title("DOWNLOADS")
+                            .title("PROGRESS")
                             .title_alignment(Alignment::Center)
                             .borders(Borders::ALL),
                     )
