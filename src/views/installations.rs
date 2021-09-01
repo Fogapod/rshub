@@ -1,6 +1,8 @@
 use std::io;
 use std::sync::Arc;
 
+use bytesize::ByteSize;
+
 use tui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -84,8 +86,10 @@ impl Drawable for InstallationView {
                         InstallationKind::Unpacking => "unpacking".to_owned(),
                     },
                     match &i.kind {
-                        InstallationKind::Installed { size } => format!("{}", size),
-                        InstallationKind::Downloading { progress, .. } => format!("{}", progress),
+                        InstallationKind::Installed { size } => size.to_string(),
+                        InstallationKind::Downloading { progress, .. } => {
+                            ByteSize::mib(*progress).to_string()
+                        }
                         _ => "0".to_owned(),
                     },
                 ])

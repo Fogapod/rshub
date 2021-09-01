@@ -180,7 +180,7 @@ impl InstallationsState {
 
                     let installations = app.installations.clone();
                     tokio::spawn(async move {
-                        for progress in 0..100 {
+                        for progress in 0..=42 {
                             let version = version.clone();
                             installations.write().await.items.insert(
                                 version.clone(),
@@ -188,12 +188,12 @@ impl InstallationsState {
                                     version,
                                     kind: InstallationKind::Downloading {
                                         progress,
-                                        total: 100,
+                                        total: 42,
                                     },
                                 },
                             );
 
-                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
                         }
 
                         installations.write().await.items.insert(
