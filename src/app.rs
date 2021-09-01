@@ -53,6 +53,28 @@ impl App {
     pub async fn draw(&mut self, f: &mut Frame<'_, CrosstermBackend<io::Stdout>>) {
         if let Some(tp) = self.view_stack.last() {
             if let Some(widget) = self.views.get_mut(tp) {
+                // use tui::layout::{Alignment, Constraint, Direction, Layout};
+                // use tui::style::{Color, Modifier, Style};
+                // use tui::text::Span;
+                // use tui::widgets::{Block, Borders};
+                //
+                // let chunks = Layout::default()
+                //     .constraints(vec![Constraint::Min(0), Constraint::Length(1)])
+                //     .direction(Direction::Vertical)
+                //     .split(f.size());
+
+                // f.render_widget(
+                //     Block::default()
+                //         .title(Span::styled(
+                //             " DEBUG BUILD ",
+                //             Style::default().add_modifier(Modifier::BOLD).bg(Color::Red),
+                //         ))
+                //         .title_alignment(Alignment::Center)
+                //         .borders(Borders::TOP)
+                //         .border_style(Style::default().bg(Color::Red)),
+                //     chunks[1],
+                // );
+
                 widget.draw(f, f.size(), &self.state).await;
             }
         }

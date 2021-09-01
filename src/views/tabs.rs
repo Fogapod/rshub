@@ -4,14 +4,14 @@ use std::sync::Arc;
 use tui::layout::Rect;
 use tui::{
     backend::CrosstermBackend,
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     symbols,
     symbols::DOT,
-    text::{Span, Spans},
+    text::Spans,
     widgets::canvas::{Canvas, Line, Map, MapResolution},
     widgets::BorderType,
-    widgets::{Block, Borders, ListState, Paragraph, Tabs, Wrap},
+    widgets::{Block, Borders, ListState, Tabs},
     Frame,
 };
 
@@ -158,38 +158,10 @@ impl Drawable for TabView {
             .constraints([Constraint::Length(1), Constraint::Min(0)].as_ref())
             .split(area);
 
-        let version_text = Spans::from(vec![
-            Span::styled(
-                "F1 for help ",
-                Style::default().add_modifier(Modifier::ITALIC),
-            ),
-            Span::from(format!(
-                "{} {}-{}",
-                DOT,
-                env!("CARGO_PKG_NAME"),
-                env!("CARGO_PKG_VERSION")
-            )),
-        ]);
-
         let header = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Min(0),
-                Constraint::Length(version_text.width() as u16),
-            ])
+            .constraints([Constraint::Min(0)])
             .split(chunks[0]);
-
-        f.render_widget(
-            Paragraph::new(version_text)
-                .alignment(Alignment::Right)
-                .style(
-                    Style::default()
-                        .fg(Color::DarkGray)
-                        .add_modifier(Modifier::BOLD),
-                )
-                .wrap(Wrap { trim: false }),
-            header[1],
-        );
 
         let tabs = stream::iter(Tab::all())
             .then(|t| async move { Spans::from(t.name(app).await) })

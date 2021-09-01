@@ -7,6 +7,7 @@ use tui::terminal::Frame;
 
 use crate::app::AppAction;
 use crate::datatypes::installation::InstallationAction;
+use crate::datatypes::server::Server;
 use crate::input::UserInput;
 use crate::states::{AppState, StatelessList};
 use crate::views::{Drawable, InputProcessor};
@@ -83,13 +84,8 @@ impl Drawable for ServerView {
             }
         }
 
-        let selected_server = self.state.selected().map(|s| &servers[s]);
-
         let chunks = Layout::default()
-            .constraints([
-                Constraint::Min(0),
-                Constraint::Length(if selected_server.is_some() { 5 } else { 0 }),
-            ])
+            .constraints([Constraint::Min(0), Constraint::Length(5)])
             .direction(Direction::Vertical)
             .split(area);
 
@@ -155,7 +151,7 @@ impl Drawable for ServerView {
                 Block::default()
                     .title(Spans::from(vec![
                         Span::styled(
-                            format!("SERVERS {} ", DOT,),
+                            format!(" SERVERS {} ", DOT,),
                             Style::default().add_modifier(Modifier::BOLD),
                         ),
                         Span::styled(
@@ -173,7 +169,7 @@ impl Drawable for ServerView {
                         ),
                         Span::styled("-", Style::default().add_modifier(Modifier::BOLD)),
                         Span::styled(
-                            count_offline.to_string(),
+                            format!("{} ", count_offline),
                             Style::default().add_modifier(Modifier::BOLD).fg(Color::Red),
                         ),
                     ]))
@@ -188,87 +184,142 @@ impl Drawable for ServerView {
             );
 
         // draw server info
-        if let Some(selected) = selected_server {
-            let chunks = Layout::default()
-                .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
-                .direction(Direction::Horizontal)
-                .split(chunks[1]);
-
-            let border_style = Style::default().fg(if selected.offline {
-                Color::Red
-            } else if selected.players == 0 {
-                Color::Yellow
-            } else {
-                Color::White
-            });
-
-            let text1 = Text::from(format!(
-                r#"version: {}
-                   map:     {} ({})
-                   address: {}:{}"#,
-                selected.version, selected.map, selected.gamemode, selected.ip, selected.port,
-            ));
-
-            let selected_location =
-                if let Some(location) = app.locations.read().await.items.get(&selected.ip) {
-                    format!("{}/{}", location.country, location.city)
-                } else {
-                    "unknown".to_owned()
-                };
-
-            let text2 = Text::from(format!(
-                r#"fps:      {}
-                   time:     {}
-                   location: {}"#,
-                selected.fps, selected.time, selected_location
-            ));
-
-            let par1 = Paragraph::new(text1)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL - Borders::RIGHT)
-                        .border_style(border_style)
-                        .title(Spans::from(vec![
-                            Span::styled(
-                                format!(" {}", selected.name),
-                                Style::default()
-                                    .add_modifier(Modifier::BOLD)
-                                    .fg(Color::Blue),
-                            ),
-                            Span::styled(
-                                format!(" {} ", DOT),
-                                Style::default().add_modifier(Modifier::BOLD),
-                            ),
-                        ]))
-                        .title_alignment(Alignment::Right),
-                )
-                .alignment(Alignment::Left)
-                .wrap(Wrap { trim: true });
-
-            let par2 = Paragraph::new(text2)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL - Borders::LEFT)
-                        .border_style(border_style)
-                        .title(Span::styled(
-                            format!("{} ", selected.players),
-                            Style::default().add_modifier(Modifier::BOLD).fg(
-                                if selected.players > 0 {
-                                    Color::Green
-                                } else {
-                                    Color::Red
-                                },
-                            ),
-                        ))
-                        .title_alignment(Alignment::Left),
-                )
-                .alignment(Alignment::Left)
-                .wrap(Wrap { trim: true });
-
-            f.render_widget(par1, chunks[0]);
-            f.render_widget(par2, chunks[1]);
+        if let Some(selected) = self.state.selected().map(|s| &servers[s]) {
+            draw_server_info(f, chunks[1], app, selected).await;
+        } else {
+            draw_info(f, chunks[1], app);
         }
 
         f.render_stateful_widget(table, chunks[0], &mut self.state.state);
     }
+}
+
+async fn draw_server_info(
+    f: &mut Frame<'_, CrosstermBackend<io::Stdout>>,
+    area: Rect,
+    app: &AppState,
+    selected: &Server,
+) {
+    let selected_location =
+        if let Some(location) = app.locations.read().await.items.get(&selected.ip) {
+            format!("{}/{}", location.country, location.city)
+        } else {
+            "unknown".to_owned()
+        };
+
+    let rows = vec![
+        Row::new(vec![
+            format!("version : {}", selected.version),
+            format!("fps      : {}", selected.fps),
+        ]),
+        Row::new(vec![
+            format!("map     : {} ({})", selected.map, selected.gamemode),
+            format!("time     : {}", selected.time),
+        ]),
+        Row::new(vec![
+            format!("address : {}:{}", selected.ip, selected.port,),
+            format!("location : {}", selected_location),
+        ]),
+    ];
+
+    let table = Table::new(rows)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(if selected.offline {
+                    Color::Red
+                } else if selected.players == 0 {
+                    Color::Yellow
+                } else {
+                    Color::White
+                }))
+                .title(Spans::from(vec![
+                    Span::styled(
+                        selected.name.clone(),
+                        Style::default()
+                            .add_modifier(Modifier::BOLD)
+                            .fg(Color::Blue),
+                    ),
+                    Span::styled(
+                        format!(" {} ", DOT),
+                        Style::default().add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        format!("{} ", selected.players),
+                        Style::default()
+                            .add_modifier(Modifier::BOLD)
+                            .fg(if selected.players > 0 {
+                                Color::Green
+                            } else {
+                                Color::Red
+                            }),
+                    ),
+                ]))
+                .title_alignment(Alignment::Left),
+        )
+        .widths(&[Constraint::Percentage(50), Constraint::Percentage(50)])
+        .highlight_style(
+            Style::default()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        );
+
+    f.render_widget(table, area);
+}
+
+fn draw_info(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: &AppState) {
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(vec![Constraint::Percentage(100)])
+        .split(area);
+
+    f.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(Span::styled(
+                format!(
+                    " {} {} {} ",
+                    env!("CARGO_PKG_NAME"),
+                    DOT,
+                    env!("CARGO_PKG_VERSION")
+                ),
+                Style::default().add_modifier(Modifier::BOLD),
+            ))
+            .title_alignment(Alignment::Center),
+        chunks[0],
+    );
+
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(area);
+
+    f.render_widget(
+        Paragraph::new(Text::from(
+            r#"
+            help :
+            build mode :
+            data directory :"#,
+        ))
+        .alignment(Alignment::Right)
+        .wrap(Wrap { trim: true }),
+        chunks[0],
+    );
+    f.render_widget(
+        Paragraph::new(Text::from(format!(
+            r#"
+ F1 (not yet implemented)
+ {}
+ {}"#,
+            if cfg!(debug_assertions) {
+                "DEBUG"
+            } else {
+                "RELEASE"
+            },
+            app.config.dirs.data_dir.display()
+        )))
+        .alignment(Alignment::Left)
+        .wrap(Wrap { trim: false }),
+        chunks[1],
+    );
 }

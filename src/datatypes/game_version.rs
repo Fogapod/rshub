@@ -15,6 +15,7 @@ impl DownloadUrl {
     pub fn new(url: &str) -> Self {
         match reqwest::Url::parse(url) {
             Ok(parsed) => {
+                // https://github.com/unitystation/stationhub/blob/cebb9d45bff0a1c019852795a471068ba89d770a/UnitystationLauncher/Models/Server.cs#L37-L57
                 if url == "https://evil.exploit" {
                     Self::Untrusted(parsed)
                 } else {
