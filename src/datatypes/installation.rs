@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
-use std::path::Path;
+use std::io;
+use std::path::{Path, PathBuf};
 
 use bytesize::ByteSize;
 
@@ -69,7 +70,11 @@ impl Installation {
                     DownloadUrl::Local,
                 ),
                 kind: InstallationKind::Installed {
-                    size: ByteSize::b(fs::metadata(build_dir).await.expect("read metadata").len()),
+                    size: ByteSize::b(
+                        Self::get_folder_size(build_dir)
+                            .await
+                            .expect("get directory size"),
+                    ),
                 },
             });
         }
@@ -77,6 +82,29 @@ impl Installation {
         log::warn!("fork {}: no build directory", fork);
 
         None
+    }
+
+    // not recursive because async recursion is not possible without hacks
+    async fn get_folder_size(path: PathBuf) -> io::Result<u64> {
+        let mut result = 0;
+
+        let mut dirs_to_check = vec![path];
+
+        while let Some(next_dir) = dirs_to_check.pop() {
+            let mut stream = fs::read_dir(next_dir).await?;
+
+            while let Some(dir) = stream.next_entry().await? {
+                let path = dir.path();
+
+                if path.is_file() {
+                    result += fs::metadata(path).await?.len();
+                } else if path.is_dir() {
+                    dirs_to_check.push(path);
+                }
+            }
+        }
+
+        Ok(result)
     }
 }
 
