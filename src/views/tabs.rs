@@ -1,4 +1,5 @@
 use std::io;
+use std::sync::Arc;
 
 use tui::layout::Rect;
 use tui::{
@@ -107,7 +108,7 @@ impl TabView {
 
 #[async_trait::async_trait]
 impl InputProcessor for TabView {
-    async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
+    async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
         match input {
             UserInput::Char('q' | 'Q') => Some(AppAction::Exit),
             UserInput::Char('s' | 'S') => {

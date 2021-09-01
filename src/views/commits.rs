@@ -1,4 +1,5 @@
 use std::io;
+use std::sync::Arc;
 
 use tui::{
     backend::CrosstermBackend,
@@ -34,7 +35,7 @@ impl CommitView {
 
 #[async_trait::async_trait]
 impl InputProcessor for CommitView {
-    async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
+    async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
         self.state.on_input(input, app.commits.read().await.count())
     }
 }
@@ -104,7 +105,8 @@ impl Drawable for CommitView {
         }
 
         if !self.loaded {
-            tokio::task::spawn(CommitState::load(app.commits.clone()));
+            app.watch_task(tokio::spawn(CommitState::load(app.commits.clone())))
+                .await;
 
             self.loaded = true;
         }

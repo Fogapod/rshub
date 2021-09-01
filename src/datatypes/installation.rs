@@ -3,7 +3,7 @@ use std::path::Path;
 
 use tokio::fs;
 
-use crate::datatypes::server::{DownloadUrl, GameVersion};
+use crate::datatypes::game_version::{DownloadUrl, GameVersion};
 
 #[derive(Debug)]
 pub enum InstallationAction {

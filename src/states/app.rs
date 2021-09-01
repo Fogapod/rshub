@@ -5,6 +5,7 @@ use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 
 use crate::config::AppConfig;
+use crate::constants::USER_AGENT;
 use crate::states::{CommitState, InstallationsState, LocationsState, ServersState};
 
 pub type TaskResult = Result<(), Box<dyn std::error::Error + Send>>;
@@ -17,6 +18,7 @@ pub struct AppState {
     pub locations: Arc<RwLock<LocationsState>>,
     pub servers: Arc<RwLock<ServersState>>,
 
+    pub client: reqwest::Client,
     pub tasks: TaskQueue,
 }
 
@@ -24,28 +26,40 @@ impl AppState {
     pub async fn new(config: AppConfig, panic_bool: Arc<AtomicBool>) -> Arc<Self> {
         let (tx, rx) = mpsc::unbounded_channel();
 
-        let tasks = Arc::new(RwLock::new(tx));
+        let client = reqwest::Client::builder()
+            .user_agent(USER_AGENT)
+            .build()
+            .expect("creating client");
 
-        let locations = LocationsState::new(&config, tasks.clone()).await;
-        let installations = InstallationsState::new(&config, tasks.clone()).await;
-        let servers = ServersState::new(
-            &config,
-            tasks.clone(),
-            locations.clone(),
-            installations.clone(),
-        )
-        .await;
+        let locations = Arc::new(RwLock::new(LocationsState::new(&config).await));
+        let installations = Arc::new(RwLock::new(InstallationsState::new(&config).await));
+        let servers = Arc::new(RwLock::new(ServersState::new(&config).await));
 
         tokio::spawn(Self::panic_watcher_super_task(panic_bool, rx));
 
-        Arc::new(Self {
-            commits: CommitState::new().await,
-            installations,
-            locations,
-            servers,
+        let instance = Arc::new(Self {
+            commits: Arc::new(RwLock::new(CommitState::new(client.clone()).await)),
+            installations: installations.clone(),
+            locations: locations.clone(),
+            servers: servers.clone(),
             config,
-            tasks,
-        })
+            client,
+            tasks: Arc::new(RwLock::new(tx)),
+        });
+
+        servers.write().await.run(instance.clone()).await;
+        locations.write().await.run(instance.clone()).await;
+        installations.write().await.run(instance.clone()).await;
+
+        instance
+    }
+
+    pub async fn watch_task(&self, task: JoinHandle<TaskResult>) {
+        self.tasks
+            .write()
+            .await
+            .send(task)
+            .expect("spawn watched task");
     }
 
     async fn panic_watcher_super_task(

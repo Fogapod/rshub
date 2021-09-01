@@ -4,50 +4,51 @@ use tokio::fs;
 use tokio::sync::{mpsc, RwLock};
 
 use crate::config::AppConfig;
-use crate::constants::USER_AGENT;
 use crate::datatypes::{
+    game_version::{DownloadUrl, GameVersion},
     installation::{Installation, InstallationAction, InstallationKind},
-    server::{DownloadUrl, GameVersion},
     value_sorted_map::ValueSortedMap,
 };
-use crate::states::app::{TaskQueue, TaskResult};
+use crate::states::app::{AppState, TaskResult};
 
 pub struct InstallationsState {
     pub items: ValueSortedMap<GameVersion, Installation>,
     pub queue: mpsc::UnboundedSender<InstallationAction>,
+    queue_recv: Option<mpsc::UnboundedReceiver<InstallationAction>>,
     pub install_dir_error: Option<String>,
-    tasks: TaskQueue,
 }
 
 impl InstallationsState {
-    pub async fn new(app: &AppConfig, tasks: TaskQueue) -> Arc<RwLock<Self>> {
+    pub async fn new(_: &AppConfig) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
 
-        let instance = Arc::new(RwLock::new(Self {
+        Self {
             items: ValueSortedMap::new(),
             queue: tx,
+            queue_recv: Some(rx),
             install_dir_error: None,
-            tasks: tasks.clone(),
-        }));
-
-        let tasks = tasks.read().await;
-
-        tasks
-            .send(tokio::task::spawn(Self::installation_handler_task(
-                instance.clone(),
-                rx,
-            )))
-            .expect("spawn installation finder task");
-
-        Self::spawn_installation_finder(app, instance.clone()).await;
-
-        instance
+        }
     }
 
-    pub async fn spawn_installation_finder(app: &AppConfig, installations: Arc<RwLock<Self>>) {
-        let mut self_ = installations.write().await;
+    pub async fn run(&mut self, app: Arc<AppState>) {
+        let queue_recv = if let Some(queue_recv) = self.queue_recv.take() {
+            queue_recv
+        } else {
+            log::error!("installation state: queue receiver already taken");
+            return;
+        };
 
-        self_.items.retain(|i| {
+        app.watch_task(tokio::task::spawn(Self::installation_handler_task(
+            app.clone(),
+            queue_recv,
+        )))
+        .await;
+
+        self.spawn_installation_finder(app.clone()).await;
+    }
+
+    pub async fn spawn_installation_finder(&mut self, app: Arc<AppState>) {
+        self.items.retain(|i| {
             !matches!(
                 i,
                 Installation {
@@ -57,15 +58,11 @@ impl InstallationsState {
             )
         });
 
-        self_
-            .tasks
-            .read()
-            .await
-            .send(tokio::task::spawn(Self::fs_installation_finder_task(
-                app.to_owned(),
-                installations.clone(),
-            )))
-            .expect("spawn installation handler task");
+        app.watch_task(tokio::task::spawn(Self::fs_installation_finder_task(
+            app.config.clone(),
+            app.installations.clone(),
+        )))
+        .await;
     }
 
     pub fn count(&self) -> usize {
@@ -116,20 +113,15 @@ impl InstallationsState {
     }
 
     async fn installation_handler_task(
-        installations: Arc<RwLock<Self>>,
+        app: Arc<AppState>,
         mut rx: mpsc::UnboundedReceiver<InstallationAction>,
     ) -> TaskResult {
-        let _ = reqwest::Client::builder()
-            .user_agent(USER_AGENT)
-            .build()
-            .expect("creating client");
-
         while let Some(action) = rx.recv().await {
             log::info!("installation action: {:?}", action);
 
             match action {
                 InstallationAction::VersionDiscovered { new, old } => {
-                    let mut installations = installations.write().await;
+                    let mut installations = app.installations.write().await;
 
                     if let Some(old_version) = old {
                         if let Some(existing) = installations.items.get(&old_version).cloned() {
@@ -169,7 +161,7 @@ impl InstallationsState {
                         }
                     };
 
-                    match installations.read().await.items.get(&version) {
+                    match app.installations.read().await.items.get(&version) {
                         Some(Installation {
                             kind: InstallationKind::Discovered,
                             ..
@@ -186,7 +178,7 @@ impl InstallationsState {
 
                     log::info!("installing: {} ({})", &version, &String::from(url.clone()));
 
-                    let installations = installations.clone();
+                    let installations = app.installations.clone();
                     tokio::spawn(async move {
                         for progress in 0..100 {
                             let version = version.clone();

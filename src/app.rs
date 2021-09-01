@@ -129,7 +129,7 @@ impl App {
         if let Some(input) = input {
             for tp in self.view_stack.iter_mut().rev() {
                 if let Some(widget) = self.views.get_mut(tp) {
-                    if let Some(action) = widget.on_input(&input, &self.state).await {
+                    if let Some(action) = widget.on_input(&input, self.state.clone()).await {
                         match action {
                             AppAction::Accepted => {
                                 break;

@@ -1,4 +1,5 @@
 use std::io;
+use std::sync::Arc;
 
 use tui::backend::CrosstermBackend;
 use tui::layout::Rect;
@@ -32,7 +33,7 @@ impl ServerView {
 
 #[async_trait::async_trait]
 impl InputProcessor for ServerView {
-    async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
+    async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
         match input {
             UserInput::Char('d' | 'D') => {
                 if let Some(i) = self.state.selected() {

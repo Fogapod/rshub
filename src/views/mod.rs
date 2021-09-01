@@ -4,6 +4,7 @@ pub mod servers;
 pub mod tabs;
 
 use std::io;
+use std::sync::Arc;
 
 use tui::backend::CrosstermBackend;
 use tui::layout::Rect;
@@ -30,7 +31,7 @@ pub trait Drawable {
 
 #[async_trait::async_trait]
 pub trait InputProcessor {
-    async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction>;
+    async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction>;
 }
 
 pub trait AppView: Drawable + InputProcessor {}

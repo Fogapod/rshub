@@ -4,36 +4,41 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 
 use crate::config::AppConfig;
-use crate::constants::USER_AGENT;
 use crate::datatypes::geolocation::{Location, IP};
-use crate::states::app::{TaskQueue, TaskResult};
+use crate::states::app::{AppState, TaskResult};
 
 pub struct LocationsState {
     pub items: HashMap<IP, Location>,
     queue: mpsc::UnboundedSender<IP>,
+    queue_recv: Option<mpsc::UnboundedReceiver<IP>>,
     geo_provider: reqwest::Url,
 }
 
 impl LocationsState {
-    pub async fn new(config: &AppConfig, tasks: TaskQueue) -> Arc<RwLock<Self>> {
-        let (tx, rx) = mpsc::unbounded_channel::<IP>();
+    pub async fn new(config: &AppConfig) -> Self {
+        let (tx, rx) = mpsc::unbounded_channel();
 
-        let instance = Arc::new(RwLock::new(Self {
+        Self {
             items: HashMap::new(),
             queue: tx,
+            queue_recv: Some(rx),
             geo_provider: config.geo_provider.clone(),
-        }));
+        }
+    }
 
-        tasks
-            .read()
-            .await
-            .send(tokio::task::spawn(Self::location_fetch_task(
-                instance.clone(),
-                rx,
-            )))
-            .expect("spawn location task");
+    pub async fn run(&mut self, app: Arc<AppState>) {
+        let queue_recv = if let Some(queue_recv) = self.queue_recv.take() {
+            queue_recv
+        } else {
+            log::error!("installation state: queue receiver already taken");
+            return;
+        };
 
-        instance
+        app.watch_task(tokio::task::spawn(Self::location_fetch_task(
+            app.clone(),
+            queue_recv,
+        )))
+        .await;
     }
 
     pub async fn resolve(&mut self, ip: IP) -> Result<(), Box<dyn std::error::Error>> {
@@ -49,24 +54,17 @@ impl LocationsState {
     }
 
     async fn location_fetch_task(
-        locations: Arc<RwLock<Self>>,
+        app: Arc<AppState>,
         mut rx: mpsc::UnboundedReceiver<IP>,
     ) -> TaskResult {
-        let client = Arc::new(
-            reqwest::Client::builder()
-                .user_agent(USER_AGENT)
-                .build()
-                .expect("creating client"),
-        );
-
-        let geo_provider = locations.read().await.geo_provider.clone();
+        let geo_provider = app.locations.read().await.geo_provider.clone();
         let errors = Arc::new(RwLock::new(Vec::new()));
 
         while let Some(ip) = rx.recv().await {
             log::debug!("resolving location: {:?}", ip);
 
-            let client = client.clone();
-            let locations = locations.clone();
+            let client = app.client.clone();
+            let locations = app.locations.clone();
             let geo_provider = geo_provider.clone();
             let errors = errors.clone();
 

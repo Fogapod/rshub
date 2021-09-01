@@ -1,4 +1,5 @@
 use std::io;
+use std::sync::Arc;
 
 use tui::{
     backend::CrosstermBackend,
@@ -10,9 +11,9 @@ use tui::{
 };
 
 use crate::app::AppAction;
-use crate::datatypes::{installation::InstallationKind, server::DownloadUrl};
+use crate::datatypes::{game_version::DownloadUrl, installation::InstallationKind};
 use crate::input::UserInput;
-use crate::states::{AppState, InstallationsState, StatelessList};
+use crate::states::{AppState, StatelessList};
 use crate::views::{Drawable, InputProcessor};
 
 pub struct InstallationView {
@@ -29,14 +30,14 @@ impl InstallationView {
 
 #[async_trait::async_trait]
 impl InputProcessor for InstallationView {
-    async fn on_input(&mut self, input: &UserInput, app: &AppState) -> Option<AppAction> {
+    async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
         match input {
             UserInput::Refresh => {
-                InstallationsState::spawn_installation_finder(
-                    &app.config,
-                    app.installations.clone(),
-                )
-                .await;
+                app.installations
+                    .write()
+                    .await
+                    .spawn_installation_finder(app.clone())
+                    .await;
                 return Some(AppAction::Accepted);
             }
             _ => self

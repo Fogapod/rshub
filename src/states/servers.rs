@@ -7,10 +7,10 @@ use tokio::sync::RwLock;
 
 use crate::config::AppConfig;
 use crate::constants::SERVER_LIST_URL;
-use crate::constants::USER_AGENT;
-use crate::datatypes::server::{DownloadUrl, GameVersion, Server, ServerListData};
+use crate::datatypes::game_version::{DownloadUrl, GameVersion};
+use crate::datatypes::server::{Server, ServerListData};
 use crate::datatypes::{geolocation::IP, installation::InstallationAction};
-use crate::states::app::{TaskQueue, TaskResult};
+use crate::states::app::{AppState, TaskResult};
 use crate::states::{InstallationsState, LocationsState};
 
 // use std::collections::hash_map::DefaultHasher;
@@ -30,22 +30,16 @@ pub struct ServersState {
 const DEBUG_GOOGOL_IP: &str = "8.8.8.8";
 
 impl ServersState {
-    pub async fn new(
-        config: &AppConfig,
-        tasks: TaskQueue,
-        locations: Arc<RwLock<LocationsState>>,
-        installations: Arc<RwLock<InstallationsState>>,
-    ) -> Arc<RwLock<Self>> {
-        let test_server_please_ignore_version = GameVersion::new(
-            "origin".to_owned(),
-            9001.to_string(),
-            DownloadUrl::new("https://evil.exploit"),
-        );
+    pub async fn new(config: &AppConfig) -> Self {
         let items = vec![Server {
             name: "TEST SERVER PLEASE IGNORE".to_owned(),
             ip: IP::Remote(DEBUG_GOOGOL_IP.to_owned()),
             offline: true,
-            version: test_server_please_ignore_version.clone(),
+            version: GameVersion::new(
+                "origin".to_owned(),
+                9001.to_string(),
+                DownloadUrl::new("https://evil.exploit"),
+            ),
             fps: 42,
             time: "13:37".to_owned(),
             gamemode: "FFA".to_owned(),
@@ -53,32 +47,36 @@ impl ServersState {
             map: "world".to_owned(),
             port: 22,
         }];
-        // dont care about error
-        let _ = installations
+
+        Self {
+            items,
+            update_interval: Duration::from_secs(config.update_interval),
+        }
+    }
+
+    pub async fn run(&mut self, app: Arc<AppState>) {
+        app.watch_task(tokio::task::spawn(Self::server_fetch_task(app.clone())))
+            .await;
+
+        let _ = app
+            .locations
+            .write()
+            .await
+            .resolve(IP::Remote(DEBUG_GOOGOL_IP.to_owned()));
+
+        let _ = app
+            .installations
             .read()
             .await
             .queue
             .send(InstallationAction::VersionDiscovered {
-                new: test_server_please_ignore_version,
+                new: GameVersion::new(
+                    "origin".to_owned(),
+                    9001.to_string(),
+                    DownloadUrl::new("https://evil.exploit"),
+                ),
                 old: None,
             });
-
-        let instance = Arc::new(RwLock::new(Self {
-            items,
-            update_interval: Duration::from_secs(config.update_interval),
-        }));
-
-        tasks
-            .read()
-            .await
-            .send(tokio::task::spawn(Self::server_fetch_task(
-                instance.clone(),
-                locations,
-                installations,
-            )))
-            .expect("spawn server fetch task");
-
-        instance
     }
 
     pub fn count(&self) -> usize {
@@ -170,30 +168,15 @@ impl ServersState {
         Ok(())
     }
 
-    async fn server_fetch_task(
-        servers: Arc<RwLock<Self>>,
-        locations: Arc<RwLock<LocationsState>>,
-        installations: Arc<RwLock<InstallationsState>>,
-    ) -> TaskResult {
-        let update_interval = servers.read().await.update_interval;
+    async fn server_fetch_task(app: Arc<AppState>) -> TaskResult {
+        let update_interval = app.servers.read().await.update_interval;
 
-        let client = reqwest::Client::builder()
-            .user_agent(USER_AGENT)
-            .build()
-            .expect("creating client");
-
-        if let Err(e) = locations.write().await.resolve(IP::Local).await {
+        if let Err(e) = app.locations.write().await.resolve(IP::Local).await {
             log::error!("error fetching local ip: {}", e);
         }
 
-        // debugging
-        let _ = locations
-            .write()
-            .await
-            .resolve(IP::Remote(DEBUG_GOOGOL_IP.to_owned()));
-
         loop {
-            let req = match client.get(SERVER_LIST_URL).send().await {
+            let req = match app.client.get(SERVER_LIST_URL).send().await {
                 Ok(req) => req,
                 Err(err) => {
                     log::error!("error creating request: {}", err);
@@ -214,10 +197,11 @@ impl ServersState {
                     todo!();
                 }
             };
-            if let Err(e) = servers
+            if let Err(e) = app
+                .servers
                 .write()
                 .await
-                .update(resp, locations.clone(), installations.clone())
+                .update(resp, app.locations.clone(), app.installations.clone())
                 .await
             {
                 log::error!("error updating servers: {}", e);
