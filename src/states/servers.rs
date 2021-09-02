@@ -69,14 +69,11 @@ impl ServersState {
             .read()
             .await
             .queue
-            .send(InstallationAction::VersionDiscovered {
-                new: GameVersion::new(
-                    "origin".to_owned(),
-                    9001.to_string(),
-                    DownloadUrl::new("https://evil.exploit"),
-                ),
-                old: None,
-            });
+            .send(InstallationAction::VersionDiscovered(GameVersion::new(
+                "origin".to_owned(),
+                9001.to_string(),
+                DownloadUrl::new("https://evil.exploit"),
+            )));
     }
 
     pub fn count(&self) -> usize {
@@ -107,10 +104,7 @@ impl ServersState {
                         .read()
                         .await
                         .queue
-                        .send(InstallationAction::VersionDiscovered {
-                            new: version.clone(),
-                            old: Some(sv_existing.version.clone()),
-                        })
+                        .send(InstallationAction::VersionDiscovered(version.clone()))
                         .unwrap();
                 }
 
@@ -129,10 +123,9 @@ impl ServersState {
                     .read()
                     .await
                     .queue
-                    .send(InstallationAction::VersionDiscovered {
-                        new: server.version.clone(),
-                        old: None,
-                    })
+                    .send(InstallationAction::VersionDiscovered(
+                        server.version.clone(),
+                    ))
                     .unwrap();
 
                 created_servers.push(server);

@@ -38,11 +38,18 @@ impl InputProcessor for InstallationView {
     async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
         match input {
             UserInput::Refresh => {
-                app.installations
-                    .write()
-                    .await
-                    .spawn_installation_finder(app.clone())
-                    .await;
+                let mut installations = app.installations.write().await;
+
+                installations.spawn_installation_finder(app.clone()).await;
+
+                for server in &app.servers.read().await.items {
+                    installations
+                        .queue
+                        .send(InstallationAction::VersionDiscovered(
+                            server.version.clone(),
+                        ))
+                        .expect("send installation action");
+                }
                 return Some(AppAction::Accepted);
             }
             UserInput::Char('d' | 'D') => {
@@ -52,6 +59,30 @@ impl InputProcessor for InstallationView {
                         .await
                         .queue
                         .send(InstallationAction::Uninstall(
+                            app.installations
+                                .read()
+                                .await
+                                .items
+                                .iter()
+                                // O(n) ...
+                                .nth(i)
+                                .unwrap()
+                                .version
+                                .clone(),
+                        ))
+                        .expect("cannot send uninstall");
+                    Some(AppAction::Accepted)
+                } else {
+                    None
+                }
+            }
+            UserInput::Char('a' | 'A') => {
+                if let Some(i) = self.state.selected() {
+                    app.installations
+                        .read()
+                        .await
+                        .queue
+                        .send(InstallationAction::AbortInstall(
                             app.installations
                                 .read()
                                 .await
@@ -182,7 +213,7 @@ impl Drawable for InstallationView {
                         Style::default()
                             .fg(Color::Green)
                             .bg(Color::Red)
-                            .add_modifier(Modifier::ITALIC | Modifier::BOLD),
+                            .add_modifier(Modifier::BOLD),
                     );
 
                 f.render_widget(gauge, chunks[1])

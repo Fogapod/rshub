@@ -53,6 +53,10 @@ impl InstallationsState {
         self.spawn_installation_finder(app.clone()).await;
     }
 
+    pub fn count(&self) -> usize {
+        self.items.len()
+    }
+
     pub async fn spawn_installation_finder(&mut self, app: Arc<AppState>) {
         self.items.retain(|i| {
             !matches!(
@@ -71,10 +75,6 @@ impl InstallationsState {
         .await;
     }
 
-    pub fn count(&self) -> usize {
-        self.items.len()
-    }
-
     async fn fs_installation_finder_task(
         app: AppConfig,
         installations: Arc<RwLock<Self>>,
@@ -88,31 +88,49 @@ impl InstallationsState {
             .await
             .expect("reading installations directory");
 
-        while let Some(dir) = dirs
+        let mut installations = installations.write().await;
+
+        while let Some(fork_dirs) = dirs
             .next_entry()
             .await
             .expect("reading installations directory files")
         {
-            let path = dir.path();
+            let fork_path = fork_dirs.path();
 
-            if !path.is_dir() {
-                log::warn!("not a directory: {}", path.display());
+            if !fork_path.is_dir() {
+                log::warn!("not a directory: {}", fork_path.display());
 
                 continue;
             }
 
-            let installation = match Installation::try_from_dir(&path).await {
-                Some(installation) => installation,
-                None => continue,
-            };
-
-            log::info!("found installation: {:?}", &installation);
-
-            installations
-                .write()
+            let mut dirs = fs::read_dir(fork_path)
                 .await
-                .items
-                .insert(installation.version.clone(), installation);
+                .expect("reading installations directory");
+
+            while let Some(build_dirs) = dirs
+                .next_entry()
+                .await
+                .expect("reading fork directory files")
+            {
+                let build_path = build_dirs.path();
+
+                if !build_path.is_dir() {
+                    log::warn!("not a directory: {}", build_path.display());
+
+                    continue;
+                }
+
+                let installation = match Installation::try_from_dir(&build_path).await {
+                    Some(installation) => installation,
+                    None => continue,
+                };
+
+                log::info!("found installation: {:?}", &installation);
+
+                installations
+                    .items
+                    .insert(installation.version.clone(), installation);
+            }
         }
 
         Ok(())
@@ -126,8 +144,8 @@ impl InstallationsState {
             log::info!("installation action: {:?}", action);
 
             match action {
-                InstallationAction::VersionDiscovered { new, old } => {
-                    Self::version_discovered(app.clone(), new, old).await;
+                InstallationAction::VersionDiscovered(version) => {
+                    Self::version_discovered(app.clone(), version).await;
                 }
                 InstallationAction::Install(version) => Self::install(app.clone(), version).await,
                 InstallationAction::AbortInstall(version) => {
@@ -142,23 +160,19 @@ impl InstallationsState {
         Ok(())
     }
 
-    async fn version_discovered(app: Arc<AppState>, new: GameVersion, old: Option<GameVersion>) {
+    async fn version_discovered(app: Arc<AppState>, version: GameVersion) {
         let mut installations = app.installations.write().await;
 
-        if let Some(old_version) = old {
-            if let Some(existing) = installations.items.get(&old_version).cloned() {
-                // we are replacing old with new only in case it was not
-                // installed or is not being installed
-                if let InstallationKind::Discovered = &existing.kind {
-                    installations.items.remove_value(&existing);
-                }
+        if let Some(existing) = installations.items.get(&version).cloned() {
+            if !matches!(&existing.kind, InstallationKind::Discovered) {
+                return;
             }
         }
 
         installations.items.insert(
-            new.clone(),
+            version.clone(),
             Installation {
-                version: new,
+                version,
                 kind: InstallationKind::Discovered,
             },
         );
@@ -215,14 +229,15 @@ impl InstallationsState {
                 .expect("TODO: missing content length");
 
             let mut path = app.config.dirs.installations_dir.clone();
-
             path.push(PathBuf::from(version.clone()));
 
-            fs::create_dir_all(&path)
-                .await
-                .expect("TODO: folder creation failed");
+            let path_parent = path.clone();
 
             path.push("data.zip");
+
+            fs::create_dir_all(&path_parent)
+                .await
+                .expect("TODO: folder creation failed");
 
             let mut file = fs::File::create(path.clone())
                 .await
@@ -231,7 +246,15 @@ impl InstallationsState {
             let mut stream = response.bytes_stream();
 
             let mut progress = 0;
-            // TODO: cancelation check
+
+            installations.write().await.items.insert(
+                version.clone(),
+                Installation {
+                    version: version.clone(),
+                    kind: InstallationKind::Downloading { progress: 0, total },
+                },
+            );
+
             while let Some(item) = stream.next().await {
                 let chunk = match item {
                     Ok(chunk) => chunk,
@@ -248,7 +271,8 @@ impl InstallationsState {
 
                 progress += chunk.len();
 
-                installations.write().await.items.insert(
+                let mut installations = installations.write().await;
+                if let Some(previous) = installations.items.insert(
                     version.clone(),
                     Installation {
                         version: version.clone(),
@@ -257,7 +281,25 @@ impl InstallationsState {
                             total,
                         },
                     },
-                );
+                ) {
+                    if !matches!(
+                        previous,
+                        Installation {
+                            kind: InstallationKind::Downloading { .. },
+                            ..
+                        },
+                    ) {
+                        log::info!("aborting installation because installation state changed");
+
+                        installations.items.insert(version.clone(), previous);
+
+                        fs::remove_dir_all(&path_parent)
+                            .await
+                            .expect("failed to cleanup");
+
+                        return;
+                    }
+                }
             }
 
             installations.write().await.items.insert(
@@ -271,40 +313,45 @@ impl InstallationsState {
             drop(file);
 
             let path_cloned = path.clone();
+            let path_parent_cloned = path_parent.clone();
+
             tokio::task::spawn_blocking(move || {
                 zip::read::ZipArchive::new(
                     std::fs::File::open(path_cloned.clone()).expect("cannot open zip file"),
                 )
                 .expect("cannot open archive")
-                .extract(path_cloned.parent().unwrap())
+                .extract(path_parent_cloned)
                 .expect("cannot extract")
             })
             .await
             .expect("something broke");
+
+            fs::remove_file(&path).await.expect("cannot delete zip");
 
             installations.write().await.items.insert(
                 version.clone(),
                 Installation {
                     version: version.clone(),
                     kind: InstallationKind::Installed {
-                        size: ByteSize::b(total),
+                        size: ByteSize::b(
+                            Installation::get_folder_size(&path_parent)
+                                .await
+                                .unwrap_or_default(),
+                        ),
                     },
                 },
             );
-
-            fs::remove_file(path).await.expect("cannot delete zip");
         });
     }
 
-    async fn abort_installation(_: Arc<AppState>, _: GameVersion) {
-        todo!();
-        // app.installations.write().await.items.insert(
-        //     version.clone(),
-        //     Installation {
-        //         version,
-        //         kind: InstallationKind::Discovered,
-        //     },
-        // );
+    async fn abort_installation(app: Arc<AppState>, version: GameVersion) {
+        app.installations.write().await.items.insert(
+            version.clone(),
+            Installation {
+                version,
+                kind: InstallationKind::Discovered,
+            },
+        );
     }
 
     async fn uninstall(app: Arc<AppState>, version: GameVersion) {
@@ -320,8 +367,8 @@ impl InstallationsState {
                 kind: InstallationKind::Installed { .. },
                 ..
             }) => {}
-            _ => {
-                log::error!("not installed, nothing to remove");
+            other => {
+                log::error!("not installed, nothing to remove: {} {:?}", version, other);
                 return;
             }
         }

@@ -1,25 +1,22 @@
-use core::borrow::Borrow;
-
 use std::cmp::Ord;
-use std::collections::{btree_set::Iter, BTreeSet, HashMap};
-use std::hash::Hash;
+use std::collections::{btree_set::Iter, BTreeMap, BTreeSet};
 
 pub struct ValueSortedMap<K, V> {
-    map: HashMap<K, V>,
+    map: BTreeMap<K, V>,
     set: BTreeSet<V>,
 }
 
-impl<K: Eq + Hash, V: Ord + Clone> ValueSortedMap<K, V> {
+impl<K: Ord, V: Ord + Clone> ValueSortedMap<K, V> {
     pub fn new() -> Self {
         Self {
-            map: HashMap::new(),
+            map: BTreeMap::new(),
             set: BTreeSet::new(),
         }
     }
 
-    pub fn insert(&mut self, k: K, v: V) {
+    pub fn insert(&mut self, k: K, v: V) -> Option<V> {
         self.map.insert(k, v.clone());
-        self.set.replace(v);
+        self.set.replace(v)
     }
 
     pub fn get(&self, k: &K) -> Option<&V> {
@@ -34,27 +31,10 @@ impl<K: Eq + Hash, V: Ord + Clone> ValueSortedMap<K, V> {
         self.set.retain(f)
     }
 
-    pub fn remove<Q: ?Sized>(&mut self, k: &Q)
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
+    pub fn remove(&mut self, k: &K) {
         self.map.remove(k).map(|v| self.set.remove(&v));
     }
 
-    pub fn remove_value<Q: ?Sized>(&mut self, value: &Q) -> bool
-    where
-        V: Borrow<Q> + Ord + PartialEq<Q>,
-        Q: Ord,
-    {
-        if self.set.remove(value) {
-            self.map.retain(|_, v| v == value);
-
-            true
-        } else {
-            false
-        }
-    }
     pub fn len(&self) -> usize {
         self.set.len()
     }

@@ -1,6 +1,5 @@
 use std::cmp::Ordering;
 use std::fmt;
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
 use crate::datatypes::server::ServerData;
@@ -86,14 +85,6 @@ impl fmt::Display for GameVersion {
     }
 }
 
-impl Hash for GameVersion {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.fork.hash(state);
-        self.build.hash(state);
-        self.download.hash(state);
-    }
-}
-
 impl PartialEq for GameVersion {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == Ordering::Equal
@@ -111,6 +102,10 @@ impl PartialOrd for GameVersion {
 // FIXME: while it can be useful to involve url in sorting, it creates duplicates
 impl Ord for GameVersion {
     fn cmp(&self, other: &Self) -> Ordering {
+        if self.build == other.build && self.fork == other.fork {
+            return Ordering::Equal;
+        }
+
         let ordering = match (&self.download, &other.download) {
             // local installations are the most important
             (DownloadUrl::Local, DownloadUrl::Local) => Ordering::Equal,
@@ -133,7 +128,10 @@ impl Ord for GameVersion {
         };
 
         if let Ordering::Equal = ordering {
-            self.build_u32.cmp(&other.build_u32)
+            match self.build.cmp(&other.build) {
+                Ordering::Equal => self.build_u32.cmp(&other.build_u32),
+                other => other,
+            }
         } else {
             ordering
         }
