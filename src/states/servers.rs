@@ -89,11 +89,13 @@ impl ServersState {
 
             if let Some(known_server) = previously_online.remove(&ip) {
                 // version changed (download/build/fork)
-                app.installations
-                    .read()
-                    .await
-                    .operation(app.clone(), VersionOperation::Discover(version.clone()))
-                    .await;
+                if known_server.version != version {
+                    app.installations
+                        .read()
+                        .await
+                        .operation(app.clone(), VersionOperation::Discover(version.clone()))
+                        .await;
+                }
 
                 // if calculate_hash(&known_server.data) != calculate_hash(&sv) {
                 //     known_server.updated = true;
