@@ -6,10 +6,9 @@ use tui::layout::Rect;
 use tui::terminal::Frame;
 
 use crate::app::AppAction;
-use crate::datatypes::installation::InstallationAction;
 use crate::datatypes::server::Server;
 use crate::input::UserInput;
-use crate::states::{AppState, StatelessList};
+use crate::states::{AppState, StatelessList, VersionOperation};
 use crate::views::{Drawable, InputProcessor};
 
 use tui::{
@@ -36,20 +35,21 @@ impl ServerView {
 impl InputProcessor for ServerView {
     async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
         match input {
-            UserInput::Char('d' | 'D') => {
+            // TODO: enter with both functions
+            UserInput::Enter => {
                 if let Some(i) = self.state.selected() {
-                    let selected = &app.servers.read().await.items[i];
-
                     app.installations
                         .read()
                         .await
-                        .queue
-                        .send(InstallationAction::Install(selected.version.clone()))
-                        .expect("cannot send install");
-                    Some(AppAction::Accepted)
-                } else {
-                    None
+                        .operation(
+                            app.clone(),
+                            VersionOperation::Install(
+                                app.installations.read().await.items[i].version.clone(),
+                            ),
+                        )
+                        .await;
                 }
+                None
             }
             _ => self.state.on_input(input, app.servers.read().await.count()),
         }

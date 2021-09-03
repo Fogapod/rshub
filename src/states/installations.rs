@@ -7,49 +7,37 @@ use futures::stream::StreamExt;
 
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 
 use crate::config::AppConfig;
 use crate::datatypes::{
     game_version::{DownloadUrl, GameVersion},
-    installation::{Installation, InstallationAction, InstallationKind},
+    installation::{Installation, InstallationKind},
     value_sorted_map::ValueSortedMap,
 };
 use crate::states::app::{AppState, TaskResult};
 
+pub enum VersionOperation {
+    Discover(GameVersion),
+    Install(GameVersion),
+    AbortInstall(GameVersion),
+    Uninstall(GameVersion),
+}
+
 pub struct InstallationsState {
     pub items: ValueSortedMap<GameVersion, Installation>,
-    pub queue: mpsc::UnboundedSender<InstallationAction>,
-    queue_recv: Option<mpsc::UnboundedReceiver<InstallationAction>>,
     pub install_dir_error: Option<String>,
 }
 
 impl InstallationsState {
     pub async fn new(_: &AppConfig) -> Self {
-        let (tx, rx) = mpsc::unbounded_channel();
-
         Self {
             items: ValueSortedMap::new(),
-            queue: tx,
-            queue_recv: Some(rx),
             install_dir_error: None,
         }
     }
 
     pub async fn run(&mut self, app: Arc<AppState>) {
-        let queue_recv = if let Some(queue_recv) = self.queue_recv.take() {
-            queue_recv
-        } else {
-            log::error!("installation state: queue receiver already taken");
-            return;
-        };
-
-        app.watch_task(tokio::task::spawn(Self::installation_handler_task(
-            app.clone(),
-            queue_recv,
-        )))
-        .await;
-
         self.spawn_installation_finder(app.clone()).await;
     }
 
@@ -58,16 +46,6 @@ impl InstallationsState {
     }
 
     pub async fn spawn_installation_finder(&mut self, app: Arc<AppState>) {
-        self.items.retain(|i| {
-            !matches!(
-                i,
-                Installation {
-                    kind: InstallationKind::Installed { .. },
-                    ..
-                }
-            )
-        });
-
         app.watch_task(tokio::task::spawn(Self::fs_installation_finder_task(
             app.config.clone(),
             app.installations.clone(),
@@ -127,45 +105,91 @@ impl InstallationsState {
 
                 log::info!("found installation: {:?}", &installation);
 
-                installations
-                    .items
-                    .insert(installation.version.clone(), installation);
+                if let Some(existing) = installations.items.get(&installation.version.clone()) {
+                    if matches!(
+                        existing,
+                        Installation {
+                            kind: InstallationKind::Downloading { .. }
+                                | InstallationKind::Unpacking,
+                            ..
+                        }
+                    ) {
+                        log::warn!("not overriding existing version {:?}", existing);
+                        return Ok(());
+                    }
+                }
+
+                log::warn!(
+                    "replaced!!!: {:?}",
+                    installations
+                        .items
+                        .insert(installation.version.clone(), installation)
+                );
             }
         }
 
         Ok(())
     }
 
-    async fn installation_handler_task(
-        app: Arc<AppState>,
-        mut rx: mpsc::UnboundedReceiver<InstallationAction>,
-    ) -> TaskResult {
-        while let Some(action) = rx.recv().await {
-            log::info!("installation action: {:?}", action);
+    // intentionally blocking
+    pub async fn refresh(&mut self, app: Arc<AppState>) {
+        // remove everything except installing versions
+        self.items.retain(|i| {
+            matches!(
+                i,
+                Installation {
+                    kind: InstallationKind::Downloading { .. } | InstallationKind::Unpacking,
+                    ..
+                }
+            )
+        });
 
-            match action {
-                InstallationAction::VersionDiscovered(version) => {
-                    Self::version_discovered(app.clone(), version).await;
-                }
-                InstallationAction::Install(version) => Self::install(app.clone(), version).await,
-                InstallationAction::AbortInstall(version) => {
-                    Self::abort_installation(app.clone(), version).await
-                }
-                InstallationAction::Uninstall(version) => {
-                    Self::uninstall(app.clone(), version).await
-                }
+        // grab versions from servers state
+        for server in &app.servers.read().await.items {
+            // these are the ones we filtered out
+            if self.items.get(&server.version).is_some() {
+                continue;
             }
+
+            self.items.insert(
+                server.version.clone(),
+                Installation {
+                    version: server.version.clone(),
+                    kind: InstallationKind::Discovered,
+                },
+            );
         }
 
-        Ok(())
+        self.spawn_installation_finder(app.clone()).await;
     }
 
-    async fn version_discovered(app: Arc<AppState>, version: GameVersion) {
+    pub async fn operation(&self, app: Arc<AppState>, operation: VersionOperation) {
+        let app_clone = app.clone();
+
+        let f = match operation {
+            VersionOperation::Discover(version) => {
+                tokio::spawn(Self::version_discovered(app, version))
+            }
+            VersionOperation::Install(version) => tokio::spawn(Self::install(app, version)),
+            VersionOperation::AbortInstall(version) => {
+                tokio::spawn(Self::abort_installation(app, version))
+            }
+            VersionOperation::Uninstall(version) => tokio::spawn(Self::uninstall(app, version)),
+        };
+
+        app_clone.watch_task(f).await;
+    }
+
+    async fn version_discovered(app: Arc<AppState>, version: GameVersion) -> TaskResult {
+        log::debug!("discovered: {}", version);
+
         let mut installations = app.installations.write().await;
 
         if let Some(existing) = installations.items.get(&version).cloned() {
             if !matches!(&existing.kind, InstallationKind::Discovered) {
-                return;
+                log::debug!("not replacing existing {:?} with discovered", existing);
+
+                return Ok(());
             }
         }
 
@@ -176,9 +200,13 @@ impl InstallationsState {
                 kind: InstallationKind::Discovered,
             },
         );
+
+        Ok(())
     }
 
-    async fn install(app: Arc<AppState>, version: GameVersion) {
+    async fn install(app: Arc<AppState>, version: GameVersion) -> TaskResult {
+        log::debug!("installing: {}", version);
+
         let url = match &version.download {
             DownloadUrl::Valid(url) => url,
             DownloadUrl::Untrusted(bad) => {
@@ -186,15 +214,15 @@ impl InstallationsState {
                     "not downloading untrusted content: {}",
                     String::from(bad.to_owned())
                 );
-                return;
+                todo!();
             }
             DownloadUrl::Invalid(bad) => {
                 log::warn!("not downloading invalid content: {}", bad);
-                return;
+                todo!();
             }
             DownloadUrl::Local => {
                 log::warn!("attempted to download local version");
-                return;
+                todo!();
             }
         }
         .to_owned();
@@ -208,7 +236,7 @@ impl InstallationsState {
             _ => {
                 log::warn!("installation state: not discovered, ignoring install request");
 
-                return;
+                return Ok(());
             }
         }
 
@@ -272,7 +300,7 @@ impl InstallationsState {
                 progress += chunk.len();
 
                 let mut installations = installations.write().await;
-                if let Some(previous) = installations.items.insert(
+                let previous = installations.items.insert(
                     version.clone(),
                     Installation {
                         version: version.clone(),
@@ -281,24 +309,25 @@ impl InstallationsState {
                             total,
                         },
                     },
+                );
+
+                if !matches!(
+                    previous,
+                    Some(Installation {
+                        kind: InstallationKind::Downloading { .. },
+                        ..
+                    }),
                 ) {
-                    if !matches!(
-                        previous,
-                        Installation {
-                            kind: InstallationKind::Downloading { .. },
-                            ..
-                        },
-                    ) {
-                        log::info!("aborting installation because installation state changed");
+                    log::info!("aborting installation because installation state changed");
 
-                        installations.items.insert(version.clone(), previous);
+                    previous
+                        .and_then(|previous| installations.items.insert(version.clone(), previous));
 
-                        fs::remove_dir_all(&path_parent)
-                            .await
-                            .expect("failed to cleanup");
+                    fs::remove_dir_all(&path_parent)
+                        .await
+                        .expect("failed to cleanup");
 
-                        return;
-                    }
+                    return;
                 }
             }
 
@@ -342,9 +371,10 @@ impl InstallationsState {
                 },
             );
         });
+        Ok(())
     }
 
-    async fn abort_installation(app: Arc<AppState>, version: GameVersion) {
+    async fn abort_installation(app: Arc<AppState>, version: GameVersion) -> TaskResult {
         app.installations.write().await.items.insert(
             version.clone(),
             Installation {
@@ -352,9 +382,10 @@ impl InstallationsState {
                 kind: InstallationKind::Discovered,
             },
         );
+        Ok(())
     }
 
-    async fn uninstall(app: Arc<AppState>, version: GameVersion) {
+    async fn uninstall(app: Arc<AppState>, version: GameVersion) -> TaskResult {
         let mut path = app.config.dirs.installations_dir.clone();
 
         path.push(PathBuf::from(version.clone()));
@@ -369,7 +400,7 @@ impl InstallationsState {
             }) => {}
             other => {
                 log::error!("not installed, nothing to remove: {} {:?}", version, other);
-                return;
+                return Ok(());
             }
         }
 
@@ -378,5 +409,9 @@ impl InstallationsState {
             .expect("TODO: removal failed");
 
         installations.items.remove(&version);
+
+        installations.refresh(app.clone()).await;
+
+        Ok(())
     }
 }

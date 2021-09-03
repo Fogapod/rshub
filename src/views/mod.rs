@@ -2,6 +2,7 @@ pub mod commits;
 pub mod installations;
 pub mod servers;
 pub mod tabs;
+pub mod world;
 
 use std::io;
 use std::sync::Arc;
@@ -17,6 +18,7 @@ use crate::states::AppState;
 #[derive(PartialEq, Eq, Hash, Debug)]
 pub enum ViewType {
     Tab,
+    World,
 }
 
 #[async_trait::async_trait]

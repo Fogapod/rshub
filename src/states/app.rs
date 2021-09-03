@@ -77,7 +77,6 @@ impl AppState {
                         log::error!("error is panic, setting panic to exit on next tick");
                         panic_bool.store(true, Ordering::Relaxed);
                     }
-
                     // TODO: handle other errors
                 }
             });

@@ -6,7 +6,7 @@ mod servers;
 
 pub use app::AppState;
 pub use commits::CommitState;
-pub use installations::InstallationsState;
+pub use installations::{InstallationsState, VersionOperation};
 pub use locations::LocationsState;
 pub use servers::ServersState;
 
@@ -118,23 +118,23 @@ impl<T: TuiState> StatelessList<T> {
         match input {
             UserInput::Up => {
                 self.select_previous(item_count);
-                Some(AppAction::Accepted)
+                None
             }
             UserInput::Down => {
                 self.select_next(item_count);
-                Some(AppAction::Accepted)
+                None
             }
             UserInput::Back => {
                 self.unselect();
-                Some(AppAction::Accepted)
+                None
             }
             UserInput::Top => {
                 self.select_first(item_count);
-                Some(AppAction::Accepted)
+                None
             }
             UserInput::Bottom => {
                 self.select_last(item_count);
-                Some(AppAction::Accepted)
+                None
             }
             _ => None,
         }

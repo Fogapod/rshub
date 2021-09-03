@@ -34,24 +34,8 @@ impl DownloadUrl {
 #[derive(Debug, Clone)]
 pub struct GameVersion {
     pub fork: String,
-    // expose string version for easier forward compatibility.
-    // currently build numbers are numbers, but it might change:
-    // https://github.com/unitystation/unitystation/issues/5089
-    // u32 value are kept for fast cmp only
     pub build: String,
-    pub(crate) build_u32: u32,
     pub download: DownloadUrl,
-}
-
-impl GameVersion {
-    pub fn new(fork: String, build: String, download: DownloadUrl) -> Self {
-        Self {
-            fork,
-            build: build.to_string(),
-            build_u32: build.parse::<u32>().unwrap_or_default(),
-            download,
-        }
-    }
 }
 
 impl From<ServerData> for GameVersion {
@@ -65,9 +49,8 @@ impl From<ServerData> for GameVersion {
 
         Self {
             fork,
-            // replace / because build is used to make path
+            // replace / for security reasons, just in case
             build: build.to_string().replace('/', ""),
-            build_u32: build,
             download: DownloadUrl::new(&download),
         }
     }
@@ -128,8 +111,8 @@ impl Ord for GameVersion {
         };
 
         if let Ordering::Equal = ordering {
-            match self.build.cmp(&other.build) {
-                Ordering::Equal => self.build_u32.cmp(&other.build_u32),
+            match self.fork.cmp(&other.fork) {
+                Ordering::Equal => self.build.cmp(&other.build),
                 other => other,
             }
         } else {

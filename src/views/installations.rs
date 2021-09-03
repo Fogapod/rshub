@@ -13,12 +13,9 @@ use tui::{
 };
 
 use crate::app::AppAction;
-use crate::datatypes::{
-    game_version::DownloadUrl,
-    installation::{InstallationAction, InstallationKind},
-};
+use crate::datatypes::{game_version::DownloadUrl, installation::InstallationKind};
 use crate::input::UserInput;
-use crate::states::{AppState, StatelessList};
+use crate::states::{AppState, StatelessList, VersionOperation};
 use crate::views::{Drawable, InputProcessor};
 
 pub struct InstallationView {
@@ -40,65 +37,45 @@ impl InputProcessor for InstallationView {
             UserInput::Refresh => {
                 let mut installations = app.installations.write().await;
 
-                installations.spawn_installation_finder(app.clone()).await;
+                installations.refresh(app.clone()).await;
 
-                for server in &app.servers.read().await.items {
-                    installations
-                        .queue
-                        .send(InstallationAction::VersionDiscovered(
-                            server.version.clone(),
-                        ))
-                        .expect("send installation action");
+                if let Some(i) = self.state.selected() {
+                    if i >= installations.count() {
+                        self.state.unselect();
+                    }
                 }
-                return Some(AppAction::Accepted);
+
+                None
             }
             UserInput::Char('d' | 'D') => {
                 if let Some(i) = self.state.selected() {
                     app.installations
                         .read()
                         .await
-                        .queue
-                        .send(InstallationAction::Uninstall(
-                            app.installations
-                                .read()
-                                .await
-                                .items
-                                .iter()
-                                // O(n) ...
-                                .nth(i)
-                                .unwrap()
-                                .version
-                                .clone(),
-                        ))
-                        .expect("cannot send uninstall");
-                    Some(AppAction::Accepted)
-                } else {
-                    None
+                        .operation(
+                            app.clone(),
+                            VersionOperation::Uninstall(
+                                app.installations.read().await.items[i].version.clone(),
+                            ),
+                        )
+                        .await;
                 }
+                None
             }
             UserInput::Char('a' | 'A') => {
                 if let Some(i) = self.state.selected() {
                     app.installations
                         .read()
                         .await
-                        .queue
-                        .send(InstallationAction::AbortInstall(
-                            app.installations
-                                .read()
-                                .await
-                                .items
-                                .iter()
-                                // O(n) ...
-                                .nth(i)
-                                .unwrap()
-                                .version
-                                .clone(),
-                        ))
-                        .expect("cannot send uninstall");
-                    Some(AppAction::Accepted)
-                } else {
-                    None
+                        .operation(
+                            app.clone(),
+                            VersionOperation::AbortInstall(
+                                app.installations.read().await.items[i].version.clone(),
+                            ),
+                        )
+                        .await;
                 }
+                None
             }
             _ => self
                 .state

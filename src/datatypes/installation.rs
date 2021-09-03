@@ -8,14 +8,6 @@ use tokio::fs;
 
 use crate::datatypes::game_version::{DownloadUrl, GameVersion};
 
-#[derive(Debug)]
-pub enum InstallationAction {
-    VersionDiscovered(GameVersion),
-    Install(GameVersion),
-    AbortInstall(GameVersion),
-    Uninstall(GameVersion),
-}
-
 #[derive(Debug, Clone)]
 pub enum InstallationKind {
     Discovered,
@@ -48,13 +40,13 @@ impl Installation {
             .to_owned();
 
         return Some(Self {
-            version: GameVersion::new(fork, build, DownloadUrl::Local),
+            version: GameVersion {
+                fork,
+                build,
+                download: DownloadUrl::Local,
+            },
             kind: InstallationKind::Installed {
-                size: ByteSize::b(
-                    Self::get_folder_size(dir)
-                        .await
-                        .expect("get directory size"),
-                ),
+                size: ByteSize::b(Self::get_folder_size(dir).await.unwrap_or_default()),
             },
         });
     }

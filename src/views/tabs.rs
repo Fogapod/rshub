@@ -6,12 +6,10 @@ use tui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
-    symbols,
     symbols::DOT,
     text::Spans,
-    widgets::canvas::{Canvas, Line, Map, MapResolution},
     widgets::BorderType,
-    widgets::{Block, Borders, ListState, Tabs},
+    widgets::{Block, ListState, Tabs},
     Frame,
 };
 
@@ -19,12 +17,11 @@ use futures::stream::{self, StreamExt};
 
 use crate::app::AppAction;
 
-use crate::datatypes::geolocation::IP;
 use crate::input::UserInput;
 use crate::states::{AppState, StatelessList};
 use crate::views::{
     commits::CommitView, installations::InstallationView, servers::ServerView, AppView, Drawable,
-    InputProcessor,
+    InputProcessor, ViewType,
 };
 
 #[derive(Copy, Clone)]
@@ -32,7 +29,6 @@ enum Tab {
     Servers,
     Installations,
     Commits,
-    Map,
 }
 
 impl Tab {
@@ -45,17 +41,11 @@ impl Tab {
                 format!("installations [{}]", app.installations.read().await.count())
             }
             Self::Commits => format!("commits [{}]", app.commits.read().await.items.len()),
-            Self::Map => "do not open".to_owned(),
         }
     }
 
-    const fn all() -> [Self; 4] {
-        [
-            Self::Servers {},
-            Self::Installations {},
-            Self::Commits {},
-            Self::Map {},
-        ]
+    const fn all() -> [Self; 3] {
+        [Self::Servers {}, Self::Installations {}, Self::Commits {}]
     }
 
     const fn tab_count() -> usize {
@@ -69,7 +59,6 @@ impl From<Tab> for usize {
             Tab::Servers => 0,
             Tab::Installations => 1,
             Tab::Commits => 2,
-            Tab::Map => 3,
         }
     }
 }
@@ -124,8 +113,11 @@ impl InputProcessor for TabView {
                 None
             }
             UserInput::Char('m' | 'M') => {
-                self.select_tab(Tab::Map);
-                None
+                if matches!(self.selected_tab(), Tab::Servers) {
+                    Some(AppAction::OpenView(ViewType::World))
+                } else {
+                    None
+                }
             }
             UserInput::Tab => {
                 self.state.select_next(Tab::tab_count());
@@ -137,7 +129,6 @@ impl InputProcessor for TabView {
                 Tab::Servers => self.view_servers.on_input(input, app).await,
                 Tab::Installations => self.view_installations.on_input(input, app).await,
                 Tab::Commits => self.view_commits.on_input(input, app).await,
-                Tab::Map => None,
             },
         }
     }
@@ -187,68 +178,6 @@ impl Drawable for TabView {
             Tab::Servers => self.view_servers.draw(f, chunks[1], app).await,
             Tab::Installations => self.view_installations.draw(f, chunks[1], app).await,
             Tab::Commits => self.view_commits.draw(f, chunks[1], app).await,
-            Tab::Map => draw_map(f, chunks[1], app).await,
         };
-    }
-}
-
-// temporarily resides here until I decide where to put it
-// TODO: render selected with labels by default, all without labels
-// TODO: zoom and map navigation
-async fn draw_map(f: &mut Frame<'_, CrosstermBackend<io::Stdout>>, area: Rect, app: &AppState) {
-    let locations = &app.locations.read().await.items;
-    let servers = &app.servers.read().await.items;
-
-    let map = Canvas::default()
-        .block(Block::default().borders(Borders::ALL))
-        .marker(symbols::Marker::Braille)
-        .x_bounds([-180.0, 180.0])
-        .y_bounds([-90.0, 90.0])
-        .paint(|ctx| {
-            ctx.draw(&Map {
-                color: Color::Blue,
-                resolution: MapResolution::High,
-            });
-            ctx.layer();
-
-            if let Some(user_location) = locations.get(&IP::Local) {
-                for sv in servers {
-                    if let Some(location) = locations.get(&sv.ip) {
-                        ctx.draw(&Line {
-                            x1: user_location.longitude,
-                            y1: user_location.latitude,
-                            x2: location.longitude,
-                            y2: location.latitude,
-                            color: Color::Yellow,
-                        });
-                    }
-                }
-
-                ctx.print(
-                    user_location.longitude,
-                    user_location.latitude,
-                    "X",
-                    Color::Red,
-                );
-            }
-
-            // separate loop to draw on top of lines
-            for sv in servers {
-                if let Some(location) = locations.get(&sv.ip) {
-                    let color = if sv.players != 0 {
-                        Color::Green
-                    } else {
-                        Color::Red
-                    };
-                    ctx.print(location.longitude, location.latitude, "O", color);
-                }
-            }
-        });
-
-    // map (canvas specifically) panics with overflow if area is 0
-    // area of size 0 could happen on wild terminal resizes
-    // this check uses 2 instead of 0 because borders add 2 to each dimension
-    if area.height > 2 && area.width > 2 {
-        f.render_widget(map, area);
     }
 }

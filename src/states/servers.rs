@@ -3,15 +3,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::RwLock;
-
 use crate::config::AppConfig;
 use crate::constants::SERVER_LIST_URL;
 use crate::datatypes::game_version::{DownloadUrl, GameVersion};
+use crate::datatypes::geolocation::IP;
 use crate::datatypes::server::{Server, ServerListData};
-use crate::datatypes::{geolocation::IP, installation::InstallationAction};
 use crate::states::app::{AppState, TaskResult};
-use crate::states::{InstallationsState, LocationsState};
+use crate::states::installations::VersionOperation;
 
 // use std::collections::hash_map::DefaultHasher;
 // use std::hash::{Hash, Hasher};
@@ -27,29 +25,10 @@ pub struct ServersState {
     update_interval: Duration,
 }
 
-const DEBUG_GOOGOL_IP: &str = "8.8.8.8";
-
 impl ServersState {
     pub async fn new(config: &AppConfig) -> Self {
-        let items = vec![Server {
-            name: "TEST SERVER PLEASE IGNORE".to_owned(),
-            ip: IP::Remote(DEBUG_GOOGOL_IP.to_owned()),
-            offline: true,
-            version: GameVersion::new(
-                "origin".to_owned(),
-                9001.to_string(),
-                DownloadUrl::new("https://evil.exploit"),
-            ),
-            fps: 42,
-            time: "13:37".to_owned(),
-            gamemode: "FFA".to_owned(),
-            players: 7,
-            map: "world".to_owned(),
-            port: 22,
-        }];
-
         Self {
-            items,
+            items: Vec::new(),
             update_interval: Duration::from_secs(config.update_interval),
         }
     }
@@ -58,22 +37,36 @@ impl ServersState {
         app.watch_task(tokio::task::spawn(Self::server_fetch_task(app.clone())))
             .await;
 
-        let _ = app
-            .locations
-            .write()
-            .await
-            .resolve(IP::Remote(DEBUG_GOOGOL_IP.to_owned()));
+        #[cfg(debug_assertions)]
+        {
+            let ip = IP::Remote("8.8.8.8".to_owned());
+            let version = GameVersion {
+                fork: "evil-exploit".to_owned(),
+                build: 666.to_string(),
+                download: DownloadUrl::new("https://evil.exploit"),
+            };
 
-        let _ = app
-            .installations
-            .read()
-            .await
-            .queue
-            .send(InstallationAction::VersionDiscovered(GameVersion::new(
-                "origin".to_owned(),
-                9001.to_string(),
-                DownloadUrl::new("https://evil.exploit"),
-            )));
+            self.items.push(Server {
+                name: "TEST SERVER PLEASE IGNORE".to_owned(),
+                ip: ip.clone(),
+                offline: true,
+                version: version.clone(),
+                fps: 42,
+                time: "13:37".to_owned(),
+                gamemode: "FFA".to_owned(),
+                players: 7,
+                map: "world".to_owned(),
+                port: 22,
+            });
+
+            let _ = app.locations.write().await.resolve(ip);
+
+            app.installations
+                .read()
+                .await
+                .operation(app.clone(), VersionOperation::Discover(version))
+                .await;
+        }
     }
 
     pub fn count(&self) -> usize {
@@ -82,62 +75,46 @@ impl ServersState {
 
     pub async fn update(
         &mut self,
+        app: Arc<AppState>,
         data: ServerListData,
-        locations: Arc<RwLock<LocationsState>>,
-        installations: Arc<RwLock<InstallationsState>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut existing: HashMap<IP, &mut Server> =
+        let mut previously_online: HashMap<IP, &mut Server> =
             self.items.iter_mut().map(|i| (i.ip.clone(), i)).collect();
 
-        // avoid borrow issues in loop, if there is a better way tell me
         let mut created_servers: Vec<Server> = Vec::new();
-        let mut existing_servers: Vec<IP> = Vec::new();
 
         for sv in data.servers {
             let ip = IP::Remote(sv.ip.clone());
             let version = GameVersion::from(sv.clone());
 
-            if let Some(sv_existing) = existing.get_mut(&ip) {
+            if let Some(known_server) = previously_online.remove(&ip) {
                 // version changed (download/build/fork)
-                if sv_existing.version != version {
-                    installations
-                        .read()
-                        .await
-                        .queue
-                        .send(InstallationAction::VersionDiscovered(version.clone()))
-                        .unwrap();
-                }
-
-                existing_servers.push(ip);
-
-                // if calculate_hash(&sv_existing.data) != calculate_hash(&sv) {
-                //     sv_existing.updated = true;
-                // }
-
-                sv_existing.offline = false;
-                // sv_existing.data = sv;
-            } else {
-                let server = Server::new(ip.clone(), version, sv);
-
-                installations
+                app.installations
                     .read()
                     .await
-                    .queue
-                    .send(InstallationAction::VersionDiscovered(
-                        server.version.clone(),
-                    ))
-                    .unwrap();
+                    .operation(app.clone(), VersionOperation::Discover(version.clone()))
+                    .await;
 
-                created_servers.push(server);
-                locations.write().await.resolve(ip).await?;
+                // if calculate_hash(&known_server.data) != calculate_hash(&sv) {
+                //     known_server.updated = true;
+                // }
+
+                known_server.offline = false;
+                // known_server.data = sv;
+            } else {
+                created_servers.push(Server::new(ip.clone(), version.clone(), sv));
+
+                app.installations
+                    .read()
+                    .await
+                    .operation(app.clone(), VersionOperation::Discover(version))
+                    .await;
+
+                app.locations.write().await.resolve(ip).await?;
             }
         }
 
-        for ip in existing_servers {
-            existing.remove(&ip);
-        }
-
-        for sv in existing.values_mut() {
+        for sv in previously_online.values_mut() {
             sv.offline = true;
         }
 
@@ -190,13 +167,7 @@ impl ServersState {
                     todo!();
                 }
             };
-            if let Err(e) = app
-                .servers
-                .write()
-                .await
-                .update(resp, app.locations.clone(), app.installations.clone())
-                .await
-            {
+            if let Err(e) = app.servers.write().await.update(app.clone(), resp).await {
                 log::error!("error updating servers: {}", e);
             }
 

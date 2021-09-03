@@ -1,3 +1,5 @@
+use core::ops::Index;
+
 use std::cmp::Ord;
 use std::collections::{btree_set::Iter, BTreeMap, BTreeSet};
 
@@ -41,5 +43,14 @@ impl<K: Ord, V: Ord + Clone> ValueSortedMap<K, V> {
 
     pub fn iter(&self) -> Iter<'_, V> {
         self.set.iter()
+    }
+}
+
+impl<K, V> Index<usize> for ValueSortedMap<K, V> {
+    type Output = V;
+
+    // FIXME: this is O(n) !!!
+    fn index(&self, i: usize) -> &V {
+        self.set.iter().nth(i).expect("no entry found for key")
     }
 }

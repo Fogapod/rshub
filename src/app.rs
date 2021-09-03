@@ -10,10 +10,11 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEventKind};
 use crate::config::AppConfig;
 use crate::input::UserInput;
 use crate::states::AppState;
-use crate::views::{tabs::TabView, AppView, ViewType};
+use crate::views::{tabs::TabView, world::World, AppView, ViewType};
 
 pub enum AppAction {
-    Accepted,
+    OpenView(ViewType),
+    CloseView,
     Exit,
 }
 
@@ -42,6 +43,7 @@ impl App {
         };
 
         instance.register_view(ViewType::Tab, Box::new(TabView::new()));
+        instance.register_view(ViewType::World, Box::new(World {}));
 
         instance
     }
@@ -149,16 +151,18 @@ impl App {
         };
 
         if let Some(input) = input {
-            for tp in self.view_stack.iter_mut().rev() {
-                if let Some(widget) = self.views.get_mut(tp) {
+            if let Some(top_widget) = self.view_stack.last() {
+                if let Some(widget) = self.views.get_mut(top_widget) {
                     if let Some(action) = widget.on_input(&input, self.state.clone()).await {
                         match action {
-                            AppAction::Accepted => {
-                                break;
+                            AppAction::OpenView(view) => {
+                                self.view_stack.push(view);
+                            }
+                            AppAction::CloseView => {
+                                self.view_stack.pop();
                             }
                             AppAction::Exit => {
                                 self.stop();
-                                break;
                             }
                         }
                     }
