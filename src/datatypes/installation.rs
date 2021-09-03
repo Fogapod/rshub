@@ -4,6 +4,8 @@ use std::path::Path;
 
 use bytesize::ByteSize;
 
+use anyhow::{Context, Result};
+
 use tokio::fs;
 
 use crate::datatypes::game_version::{DownloadUrl, GameVersion};
@@ -23,12 +25,12 @@ pub struct Installation {
 }
 
 impl Installation {
-    pub async fn try_from_dir(dir: &Path) -> Option<Self> {
+    pub async fn try_from_dir(dir: &Path) -> Result<Self> {
         let build = dir
             .file_name()
             .unwrap()
             .to_str()
-            .expect("bad build directory name")
+            .with_context(|| "Bad build directory name")?
             .to_owned();
         let fork = dir
             .parent()
@@ -36,10 +38,10 @@ impl Installation {
             .file_name()
             .unwrap()
             .to_str()
-            .expect("bad fork directory name")
+            .with_context(|| "Bad fork directory name")?
             .to_owned();
 
-        return Some(Self {
+        return Ok(Self {
             version: GameVersion {
                 fork,
                 build,

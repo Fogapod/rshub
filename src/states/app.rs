@@ -1,15 +1,17 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task::JoinHandle;
+
+use anyhow::Result;
 
 use crate::config::AppConfig;
 use crate::constants::USER_AGENT;
 use crate::states::{CommitState, InstallationsState, LocationsState, ServersState};
 
-pub type TaskResult = Result<(), Box<dyn std::error::Error + Send>>;
-pub type TaskQueue = Arc<RwLock<mpsc::UnboundedSender<JoinHandle<TaskResult>>>>;
+pub type TaskResult = Result<()>;
+pub type TaskQueue = Mutex<mpsc::UnboundedSender<JoinHandle<TaskResult>>>;
 
 pub struct AppState {
     pub config: AppConfig,
@@ -19,7 +21,7 @@ pub struct AppState {
     pub servers: Arc<RwLock<ServersState>>,
 
     pub client: reqwest::Client,
-    pub tasks: TaskQueue,
+    tasks: TaskQueue,
 }
 
 impl AppState {
@@ -44,7 +46,7 @@ impl AppState {
             servers: servers.clone(),
             config,
             client,
-            tasks: Arc::new(RwLock::new(tx)),
+            tasks: Mutex::new(tx),
         });
 
         servers.write().await.run(instance.clone()).await;
@@ -56,7 +58,7 @@ impl AppState {
 
     pub async fn watch_task(&self, task: JoinHandle<TaskResult>) {
         self.tasks
-            .write()
+            .lock()
             .await
             .send(task)
             .expect("spawn watched task");
@@ -69,19 +71,28 @@ impl AppState {
         while let Some(task) = recv.recv().await {
             let panic_bool = panic_bool.clone();
 
-            tokio::spawn(async move {
-                if let Err(err) = task.await {
-                    log::warn!("super task task error: {:?}", &err);
-
-                    if err.is_panic() {
-                        log::error!("error is panic, setting panic to exit on next tick");
-                        panic_bool.store(true, Ordering::Relaxed);
-                    }
-                    // TODO: handle other errors
-                }
-            });
+            tokio::spawn(Self::wrap_task(task, panic_bool));
         }
 
         log::info!("task channel closed");
+    }
+
+    async fn wrap_task(task: JoinHandle<TaskResult>, panic_bool: Arc<AtomicBool>) {
+        match task.await {
+            Err(err) => {
+                log::warn!("join error: {:?}", &err);
+
+                if err.is_panic() {
+                    log::error!("error is panic, setting panic to exit on next tick");
+                    panic_bool.store(true, Ordering::Relaxed);
+                }
+                // TODO: handle other errors
+            }
+            Ok(result) => {
+                if let Err(err) = result {
+                    log::error!("task error: {}", err);
+                }
+            }
+        }
     }
 }

@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use bytesize::ByteSize;
 
+use anyhow::{bail, Context};
+
 use futures::stream::StreamExt;
 
 use tokio::fs;
@@ -65,44 +67,42 @@ impl InstallationsState {
 
         let mut dirs = fs::read_dir(app.dirs.installations_dir)
             .await
-            .expect("reading installations directory");
+            .with_context(|| "Unable to read installation directory")?;
 
         let mut installations = installations.write().await;
 
         while let Some(fork_dirs) = dirs
             .next_entry()
             .await
-            .expect("reading installations directory files")
+            .with_context(|| "Unable to read fork list")?
         {
             let fork_path = fork_dirs.path();
 
             if !fork_path.is_dir() {
-                log::warn!("not a directory: {}", fork_path.display());
-
                 continue;
             }
 
             let mut dirs = fs::read_dir(fork_path)
                 .await
-                .expect("reading installations directory");
+                .with_context(|| "Unable to read build directory")?;
 
             while let Some(build_dirs) = dirs
                 .next_entry()
                 .await
-                .expect("reading fork directory files")
+                .with_context(|| "Unable to read build list")?
             {
                 let build_path = build_dirs.path();
 
                 if !build_path.is_dir() {
-                    log::warn!("not a directory: {}", build_path.display());
-
                     continue;
                 }
 
-                let installation = match Installation::try_from_dir(&build_path).await {
-                    Some(installation) => installation,
-                    None => continue,
-                };
+                let installation =
+                    Installation::try_from_dir(&build_path)
+                        .await
+                        .with_context(|| {
+                            format!("Unable to parse installation: {}", build_path.display())
+                        })?;
 
                 log::info!("found installation: {:?}", &installation);
 
@@ -120,12 +120,9 @@ impl InstallationsState {
                     }
                 }
 
-                log::warn!(
-                    "replaced!!!: {:?}",
-                    installations
-                        .items
-                        .insert(installation.version.clone(), installation)
-                );
+                installations
+                    .items
+                    .insert(installation.version.clone(), installation);
             }
         }
 
@@ -211,19 +208,13 @@ impl InstallationsState {
         let url = match &version.download {
             DownloadUrl::Valid(url) => url,
             DownloadUrl::Untrusted(bad) => {
-                log::warn!(
-                    "not downloading untrusted content: {}",
-                    String::from(bad.to_owned())
-                );
-                todo!();
+                bail!("Not downloading untrusted content: {}", bad);
             }
             DownloadUrl::Invalid(bad) => {
-                log::warn!("not downloading invalid content: {}", bad);
-                todo!();
+                bail!("Not downloading invalid content: {}", bad);
             }
             DownloadUrl::Local => {
-                log::warn!("attempted to download local version");
-                todo!();
+                bail!("Attempted to download installed version");
             }
         }
         .to_owned();
@@ -235,7 +226,7 @@ impl InstallationsState {
             })
             | None => {}
             _ => {
-                log::warn!("installation state: not discovered, ignoring install request");
+                log::warn!("state desync: not discovered, ignoring install request");
 
                 return Ok(());
             }
@@ -243,133 +234,139 @@ impl InstallationsState {
 
         let installations = app.installations.clone();
 
-        tokio::spawn(async move {
-            let response = app
-                .client
-                .get(url.clone())
-                .send()
-                .await
-                .expect("download failed");
+        let response = app
+            .client
+            .get(url.clone())
+            .send()
+            .await
+            .with_context(|| "Initial request failed")?;
 
-            let total = response
-                .content_length()
-                .expect("TODO: missing content length");
+        // TODO: handle downloads without known length
+        let total = match response.content_length() {
+            Some(total) => total,
+            None => bail!("Unable to get content length"),
+        };
 
-            let mut path = app.config.dirs.installations_dir.clone();
-            path.push(PathBuf::from(version.clone()));
+        let mut path = app.config.dirs.installations_dir.clone();
+        path.push(PathBuf::from(version.clone()));
 
-            let path_parent = path.clone();
+        let path_parent = path.clone();
 
-            path.push("data.zip");
+        path.push("data.zip");
 
-            fs::create_dir_all(&path_parent)
-                .await
-                .expect("TODO: folder creation failed");
+        fs::create_dir_all(&path_parent)
+            .await
+            .with_context(|| "Unable to create installation folder")?;
 
-            let mut file = fs::File::create(path.clone())
-                .await
-                .expect("TODO: file creation failed");
+        let mut file = fs::File::create(path.clone())
+            .await
+            .with_context(|| "Unable to create archive file")?;
 
-            let mut stream = response.bytes_stream();
+        let mut stream = response.bytes_stream();
 
-            let mut progress = 0;
+        let mut progress = 0;
 
-            installations.write().await.items.insert(
-                version.clone(),
-                Installation {
-                    version: version.clone(),
-                    kind: InstallationKind::Downloading { progress: 0, total },
-                },
-            );
+        installations.write().await.items.insert(
+            version.clone(),
+            Installation {
+                version: version.clone(),
+                kind: InstallationKind::Downloading { progress: 0, total },
+            },
+        );
 
-            while let Some(item) = stream.next().await {
-                let chunk = match item {
-                    Ok(chunk) => chunk,
-                    Err(err) => {
-                        log::error!("failed to read next chunk: {}", err);
-                        return;
-                    }
-                };
-
-                if let Err(err) = file.write(&chunk).await {
-                    log::error!("failed to write chunk: {}", err);
-                    return;
+        while let Some(item) = stream.next().await {
+            let chunk = match item {
+                Ok(chunk) => chunk,
+                Err(err) => {
+                    bail!("Failed to read next chunk: {}", err);
                 }
+            };
 
-                progress += chunk.len();
-
-                let mut installations = installations.write().await;
-                let previous = installations.items.insert(
-                    version.clone(),
-                    Installation {
-                        version: version.clone(),
-                        kind: InstallationKind::Downloading {
-                            progress: progress as u64,
-                            total,
-                        },
-                    },
-                );
-
-                if !matches!(
-                    previous,
-                    Some(Installation {
-                        kind: InstallationKind::Downloading { .. },
-                        ..
-                    }),
-                ) {
-                    log::info!("aborting installation because installation state changed");
-
-                    previous
-                        .and_then(|previous| installations.items.insert(version.clone(), previous));
-
-                    fs::remove_dir_all(&path_parent)
-                        .await
-                        .expect("failed to cleanup");
-
-                    return;
-                }
+            if let Err(err) = file.write(&chunk).await {
+                bail!("Failed to write next chunk: {}", err);
             }
 
-            installations.write().await.items.insert(
+            progress += chunk.len();
+
+            let mut installations = installations.write().await;
+            let previous = installations.items.insert(
                 version.clone(),
                 Installation {
                     version: version.clone(),
-                    kind: InstallationKind::Unpacking,
-                },
-            );
-
-            drop(file);
-
-            let path_cloned = path.clone();
-            let path_parent_cloned = path_parent.clone();
-
-            tokio::task::spawn_blocking(move || {
-                zip::read::ZipArchive::new(
-                    std::fs::File::open(path_cloned.clone()).expect("cannot open zip file"),
-                )
-                .expect("cannot open archive")
-                .extract(path_parent_cloned)
-                .expect("cannot extract")
-            })
-            .await
-            .expect("something broke");
-
-            fs::remove_file(&path).await.expect("cannot delete zip");
-
-            installations.write().await.items.insert(
-                version.clone(),
-                Installation {
-                    version: version.clone(),
-                    kind: InstallationKind::Installed {
-                        size: ByteSize::b(
-                            Installation::get_folder_size(&path_parent)
-                                .await
-                                .unwrap_or_default(),
-                        ),
+                    kind: InstallationKind::Downloading {
+                        progress: progress as u64,
+                        total,
                     },
                 },
             );
-        });
+
+            if !matches!(
+                previous,
+                Some(Installation {
+                    kind: InstallationKind::Downloading { .. },
+                    ..
+                }),
+            ) {
+                log::info!("aborting installation because installation state changed");
+
+                previous.and_then(|previous| installations.items.insert(version.clone(), previous));
+
+                if let Err(err) = fs::remove_dir_all(&path_parent).await {
+                    log::error!(
+                        "Unable to cleanup download directory {}: {}",
+                        path_parent.display(),
+                        err
+                    );
+                }
+
+                return Ok(());
+            }
+        }
+
+        installations.write().await.items.insert(
+            version.clone(),
+            Installation {
+                version: version.clone(),
+                kind: InstallationKind::Unpacking,
+            },
+        );
+
+        drop(file);
+
+        let path_cloned = path.clone();
+        let path_parent_cloned = path_parent.clone();
+
+        tokio::task::spawn_blocking(move || -> TaskResult {
+            zip::read::ZipArchive::new(
+                std::fs::File::open(path_cloned.clone())
+                    .with_context(|| "Unable to read zip file")?,
+            )
+            .with_context(|| "Unable to decode zip file")?
+            .extract(path_parent_cloned)
+            .with_context(|| "Unable to extract zip file")
+        })
+        .await
+        .with_context(|| "Task joining failed")?
+        .with_context(|| "Archive decompression failed")?;
+
+        if let Err(err) = fs::remove_file(&path).await {
+            log::error!("Unable to cleanup zip file {}: {}", path.display(), err);
+        }
+
+        installations.write().await.items.insert(
+            version.clone(),
+            Installation {
+                version: version.clone(),
+                kind: InstallationKind::Installed {
+                    size: ByteSize::b(
+                        Installation::get_folder_size(&path_parent)
+                            .await
+                            .unwrap_or_default(),
+                    ),
+                },
+            },
+        );
+
         Ok(())
     }
 
@@ -381,6 +378,7 @@ impl InstallationsState {
                 kind: InstallationKind::Discovered,
             },
         );
+
         Ok(())
     }
 
@@ -397,15 +395,14 @@ impl InstallationsState {
                 kind: InstallationKind::Installed { .. },
                 ..
             }) => {}
-            other => {
-                log::error!("not installed, nothing to remove: {} {:?}", version, other);
-                return Ok(());
+            _ => {
+                bail!("not installed, nothing to remove: {}", version);
             }
         }
 
         fs::remove_dir_all(path)
             .await
-            .expect("TODO: removal failed");
+            .with_context(|| "Unable to remove build directory")?;
 
         installations.items.remove(&version);
 
