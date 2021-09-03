@@ -74,10 +74,22 @@ const fn verbosity_to_log_level(verbosity: u32) -> LevelFilter {
     }
 }
 fn setup_logger(config: &AppConfig) -> Result<(), io::Error> {
-    simple_logging::log_to_file(
-        &config.dirs.log_file,
+    simplelog::WriteLogger::init(
         verbosity_to_log_level(config.verbose),
+        simplelog::ConfigBuilder::default()
+            .set_level_padding(simplelog::LevelPadding::Right)
+            .set_thread_level(LevelFilter::Off)
+            .add_filter_ignore_str("mio")
+            .add_filter_ignore_str("want")
+            .add_filter_ignore_str("rustls")
+            .add_filter_ignore_str("reqwest")
+            .add_filter_ignore_str("tokio_util")
+            .build(),
+        std::fs::File::create(&config.dirs.log_file)?,
     )
+    .expect("creating logger");
+
+    Ok(())
 }
 
 fn _main() -> Result<(), Box<dyn std::error::Error>> {

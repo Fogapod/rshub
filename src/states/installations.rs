@@ -17,6 +17,7 @@ use crate::datatypes::{
 };
 use crate::states::app::{AppState, TaskResult};
 
+#[derive(Debug)]
 pub enum VersionOperation {
     Discover(GameVersion),
     Install(GameVersion),
@@ -164,6 +165,8 @@ impl InstallationsState {
     }
 
     pub async fn operation(&self, app: Arc<AppState>, operation: VersionOperation) {
+        log::debug!("version operation: {:?}", &operation);
+
         let app_clone = app.clone();
 
         let f = match operation {
@@ -205,8 +208,6 @@ impl InstallationsState {
     }
 
     async fn install(app: Arc<AppState>, version: GameVersion) -> TaskResult {
-        log::debug!("installing: {}", version);
-
         let url = match &version.download {
             DownloadUrl::Valid(url) => url,
             DownloadUrl::Untrusted(bad) => {
@@ -239,8 +240,6 @@ impl InstallationsState {
                 return Ok(());
             }
         }
-
-        log::info!("installing: {} ({})", &version, &String::from(url.clone()));
 
         let installations = app.installations.clone();
 

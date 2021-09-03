@@ -151,8 +151,8 @@ impl App {
         };
 
         if let Some(input) = input {
-            if let Some(top_widget) = self.view_stack.last() {
-                if let Some(widget) = self.views.get_mut(top_widget) {
+            if let Some(top_widget_type) = self.view_stack.last() {
+                if let Some(widget) = self.views.get_mut(top_widget_type) {
                     if let Some(action) = widget.on_input(&input, self.state.clone()).await {
                         match action {
                             AppAction::OpenView(view) => {
