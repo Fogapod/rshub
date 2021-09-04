@@ -1,8 +1,8 @@
-mod app;
-mod commits;
-mod installations;
-mod locations;
-mod servers;
+pub mod app;
+pub mod commits;
+pub mod installations;
+pub mod locations;
+pub mod servers;
 
 pub use app::AppState;
 pub use commits::CommitState;

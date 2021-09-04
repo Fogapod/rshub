@@ -9,7 +9,7 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEventKind};
 
 use crate::config::AppConfig;
 use crate::input::UserInput;
-use crate::states::AppState;
+use crate::states::app::AppState;
 use crate::views::{tabs::TabView, world::World, AppView, ViewType};
 
 pub enum AppAction {
@@ -31,9 +31,10 @@ pub struct App {
 impl App {
     pub async fn new(config: AppConfig) -> Self {
         let panic_bool = Arc::new(AtomicBool::new(false));
+        let state = AppState::new(config, panic_bool.clone()).await;
 
         let mut instance = Self {
-            state: AppState::new(config, panic_bool.clone()).await,
+            state,
             views: HashMap::new(),
 
             view_stack: vec![ViewType::Tab],
