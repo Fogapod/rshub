@@ -62,8 +62,8 @@ impl fmt::Display for GameVersion {
 
         match self.download {
             DownloadUrl::Valid(_) | DownloadUrl::Local => Ok(()),
-            DownloadUrl::Untrusted(_) => write!(f, " [untrusted download URL]"),
-            DownloadUrl::Invalid(_) => write!(f, " [bad download URL]"),
+            DownloadUrl::Untrusted(_) => write!(f, " [untrusted download]"),
+            DownloadUrl::Invalid(_) => write!(f, " [bad download]"),
         }
     }
 }
