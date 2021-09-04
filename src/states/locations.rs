@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use tokio::sync::{mpsc, RwLock};
 
+use anyhow::Result;
+
 use crate::config::AppConfig;
 use crate::datatypes::geolocation::{Location, IP};
 use crate::states::app::{AppState, TaskResult};
@@ -41,7 +43,7 @@ impl LocationsState {
         .await;
     }
 
-    pub async fn resolve(&mut self, ip: IP) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn resolve(&mut self, ip: IP) -> Result<()> {
         {
             if self.items.get(&ip).is_some() {
                 return Ok(());

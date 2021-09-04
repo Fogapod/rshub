@@ -51,6 +51,6 @@ impl<K, V> Index<usize> for ValueSortedMap<K, V> {
 
     // FIXME: this is O(n) !!!
     fn index(&self, i: usize) -> &V {
-        self.set.iter().nth(i).expect("no entry found for key")
+        self.set.iter().nth(i).expect("no entry found for index")
     }
 }

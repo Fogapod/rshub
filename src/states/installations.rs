@@ -159,6 +159,11 @@ impl InstallationsState {
         }
 
         self.spawn_installation_finder(app.clone()).await;
+        app.events
+            .read()
+            .await
+            .event("Refreshed installation list (still looking in file system)")
+            .await;
     }
 
     pub async fn operation(&self, app: Arc<AppState>, operation: VersionOperation) {
@@ -193,6 +198,12 @@ impl InstallationsState {
             }
         }
 
+        app.events
+            .read()
+            .await
+            .event(&format!("Discovered {}", version))
+            .await;
+
         installations.items.insert(
             version.clone(),
             Installation {
@@ -208,16 +219,22 @@ impl InstallationsState {
         let url = match &version.download {
             DownloadUrl::Valid(url) => url,
             DownloadUrl::Untrusted(bad) => {
-                bail!("Not downloading untrusted content: {}", bad);
+                bail!("Not downloading (untrusted URL): `{}`", bad);
             }
             DownloadUrl::Invalid(bad) => {
-                bail!("Not downloading invalid content: {}", bad);
+                bail!("Not downloading (invalid URL): `{}`", bad);
             }
             DownloadUrl::Local => {
                 bail!("Attempted to download installed version");
             }
         }
         .to_owned();
+
+        app.events
+            .read()
+            .await
+            .event(&format!("Downloading {}", version))
+            .await;
 
         match app.installations.read().await.items.get(&version) {
             Some(Installation {
@@ -336,6 +353,12 @@ impl InstallationsState {
         let path_cloned = path.clone();
         let path_parent_cloned = path_parent.clone();
 
+        app.events
+            .read()
+            .await
+            .event(&format!("Extracting {}", version))
+            .await;
+
         tokio::task::spawn_blocking(move || -> TaskResult {
             zip::read::ZipArchive::new(
                 std::fs::File::open(path_cloned.clone())
@@ -367,17 +390,41 @@ impl InstallationsState {
             },
         );
 
+        app.events
+            .read()
+            .await
+            .event(&format!("Installed version {}", version))
+            .await;
+
         Ok(())
     }
 
     async fn abort_installation(app: Arc<AppState>, version: GameVersion) -> TaskResult {
-        app.installations.write().await.items.insert(
-            version.clone(),
-            Installation {
-                version,
-                kind: InstallationKind::Discovered,
-            },
-        );
+        let mut installations = app.installations.write().await;
+
+        if matches!(
+            installations.items.get(&version),
+            Some(Installation {
+                kind: InstallationKind::Downloading { .. } | InstallationKind::Unpacking,
+                ..
+            })
+        ) {
+            installations.items.insert(
+                version.clone(),
+                Installation {
+                    version: version.clone(),
+                    kind: InstallationKind::Discovered,
+                },
+            );
+
+            app.events
+                .read()
+                .await
+                .event(&format!("Aborted installation of {}", version))
+                .await;
+        } else {
+            bail!("Nothing to abort");
+        }
 
         Ok(())
     }
@@ -407,6 +454,12 @@ impl InstallationsState {
         installations.items.remove(&version);
 
         installations.refresh(app.clone()).await;
+
+        app.events
+            .read()
+            .await
+            .event(&format!("Uninstalled {}", version))
+            .await;
 
         Ok(())
     }

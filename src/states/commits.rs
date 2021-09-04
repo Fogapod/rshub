@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use anyhow::Context;
+
 use tokio::sync::RwLock;
 
 use crate::datatypes::commit::{Commit, CommitRange};
@@ -31,7 +33,7 @@ impl CommitState {
             "application/vnd.github.v3+json".parse().unwrap(),
         );
 
-        let req = match commits
+        let req = commits
             .read()
             .await
             .client
@@ -39,27 +41,16 @@ impl CommitState {
             .headers(headers)
             .send()
             .await
-        {
-            Ok(req) => req,
-            Err(err) => {
-                log::error!("error creating request: {}", err);
-                todo!();
-            }
-        };
-        let req = match req.error_for_status() {
-            Ok(req) => req,
-            Err(err) => {
-                log::error!("bad status: {}", err);
-                todo!();
-            }
-        };
-        let resp = match req.json::<CommitRange>().await {
-            Ok(resp) => resp,
-            Err(err) => {
-                log::error!("error decoding request: {}", err);
-                todo!();
-            }
-        };
+            .with_context(|| "Creating commits request")?;
+
+        let req = req
+            .error_for_status()
+            .with_context(|| "Reading commits request")?;
+
+        let resp = req
+            .json::<CommitRange>()
+            .await
+            .with_context(|| "Decoding commits request")?;
 
         commits.write().await.update(resp);
 

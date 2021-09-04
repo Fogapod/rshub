@@ -10,7 +10,7 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEventKind};
 use crate::config::AppConfig;
 use crate::input::UserInput;
 use crate::states::app::AppState;
-use crate::views::{tabs::TabView, world::World, AppView, ViewType};
+use crate::views::{events::EventsView, tabs::TabView, world::World, AppView, Drawable, ViewType};
 
 pub enum AppAction {
     OpenView(ViewType),
@@ -19,10 +19,12 @@ pub enum AppAction {
 }
 
 pub struct App {
+    pub state: Arc<AppState>,
+
     views: HashMap<ViewType, Box<dyn AppView>>,
     view_stack: Vec<ViewType>,
 
-    pub state: Arc<AppState>,
+    events_view: EventsView,
 
     pub stopped: bool,
     pub panicked: Arc<AtomicBool>,
@@ -35,9 +37,11 @@ impl App {
 
         let mut instance = Self {
             state,
-            views: HashMap::new(),
 
+            views: HashMap::new(),
             view_stack: vec![ViewType::Tab],
+
+            events_view: EventsView {},
 
             stopped: false,
             panicked: panic_bool,
@@ -56,29 +60,22 @@ impl App {
     pub async fn draw(&mut self, f: &mut Frame<'_, CrosstermBackend<io::Stdout>>) {
         if let Some(tp) = self.view_stack.last() {
             if let Some(widget) = self.views.get_mut(tp) {
-                // use tui::layout::{Alignment, Constraint, Direction, Layout};
-                // use tui::style::{Color, Modifier, Style};
-                // use tui::text::Span;
-                // use tui::widgets::{Block, Borders};
-                //
-                // let chunks = Layout::default()
-                //     .constraints(vec![Constraint::Min(0), Constraint::Length(1)])
-                //     .direction(Direction::Vertical)
-                //     .split(f.size());
+                use tui::layout::{Constraint, Direction, Layout};
 
-                // f.render_widget(
-                //     Block::default()
-                //         .title(Span::styled(
-                //             " DEBUG BUILD ",
-                //             Style::default().add_modifier(Modifier::BOLD).bg(Color::Red),
-                //         ))
-                //         .title_alignment(Alignment::Center)
-                //         .borders(Borders::TOP)
-                //         .border_style(Style::default().bg(Color::Red)),
-                //     chunks[1],
-                // );
+                let area = if self.state.events.read().await.current_event.is_some() {
+                    let chunks = Layout::default()
+                        .constraints(vec![Constraint::Min(0), Constraint::Length(1)])
+                        .direction(Direction::Vertical)
+                        .split(f.size());
 
-                widget.draw(f, f.size(), &self.state).await;
+                    self.events_view.draw(f, chunks[1], &self.state).await;
+
+                    chunks[0]
+                } else {
+                    f.size()
+                };
+
+                widget.draw(f, area, &self.state).await;
             }
         }
     }

@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::{anyhow, Result};
+
 use crate::config::AppConfig;
 use crate::constants::SERVER_LIST_URL;
 use crate::datatypes::game_version::{DownloadUrl, GameVersion};
@@ -73,11 +75,7 @@ impl ServersState {
         self.items.len()
     }
 
-    pub async fn update(
-        &mut self,
-        app: Arc<AppState>,
-        data: ServerListData,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn update(&mut self, app: Arc<AppState>, data: ServerListData) -> Result<()> {
         let mut previously_online: HashMap<IP, &mut Server> =
             self.items.iter_mut().map(|i| (i.ip.clone(), i)).collect();
 
@@ -143,34 +141,55 @@ impl ServersState {
     async fn server_fetch_task(app: Arc<AppState>) -> TaskResult {
         let update_interval = app.servers.read().await.update_interval;
 
-        if let Err(e) = app.locations.write().await.resolve(IP::Local).await {
-            log::error!("error fetching local ip: {}", e);
+        if let Err(err) = app.locations.write().await.resolve(IP::Local).await {
+            app.events
+                .read()
+                .await
+                .error(anyhow!("Unable to fetch local ip: {}", err))
+                .await;
         }
 
         loop {
             let req = match app.client.get(SERVER_LIST_URL).send().await {
                 Ok(req) => req,
                 Err(err) => {
-                    log::error!("error creating request: {}", err);
-                    todo!();
+                    app.events
+                        .read()
+                        .await
+                        .error(anyhow!("Unable to create server list request: {}", err))
+                        .await;
+                    continue;
                 }
             };
             let req = match req.error_for_status() {
                 Ok(req) => req,
                 Err(err) => {
-                    log::error!("bad status: {}", err);
-                    todo!();
+                    app.events
+                        .read()
+                        .await
+                        .error(anyhow!("Bad server list response: {}", err))
+                        .await;
+                    continue;
                 }
             };
             let resp = match req.json::<ServerListData>().await {
                 Ok(resp) => resp,
                 Err(err) => {
-                    log::error!("error decoding request: {}", err);
-                    todo!();
+                    app.events
+                        .read()
+                        .await
+                        .error(anyhow!("Unable to decode server list request: {}", err))
+                        .await;
+                    continue;
                 }
             };
-            if let Err(e) = app.servers.write().await.update(app.clone(), resp).await {
-                log::error!("error updating servers: {}", e);
+            if let Err(err) = app.servers.write().await.update(app.clone(), resp).await {
+                app.events
+                    .read()
+                    .await
+                    .error(anyhow!("Unable to update server list: {}", err))
+                    .await;
+                continue;
             }
 
             tokio::time::sleep(update_interval).await;

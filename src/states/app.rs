@@ -8,6 +8,7 @@ use anyhow::Result;
 
 use crate::config::AppConfig;
 use crate::constants::USER_AGENT;
+use crate::states::events::EventsState;
 use crate::states::{CommitState, InstallationsState, LocationsState, ServersState};
 
 pub type TaskResult = Result<()>;
@@ -18,6 +19,7 @@ pub struct AppState {
     pub installations: Arc<RwLock<InstallationsState>>,
     pub locations: Arc<RwLock<LocationsState>>,
     pub servers: Arc<RwLock<ServersState>>,
+    pub events: Arc<RwLock<EventsState>>,
 
     pub client: reqwest::Client,
 
@@ -34,18 +36,21 @@ impl AppState {
         let locations = Arc::new(RwLock::new(LocationsState::new(&config).await));
         let installations = Arc::new(RwLock::new(InstallationsState::new(&config).await));
         let servers = Arc::new(RwLock::new(ServersState::new(&config).await));
+        let events = Arc::new(RwLock::new(EventsState::new(&config).await));
 
         let instance = Arc::new(Self {
             commits: Arc::new(RwLock::new(CommitState::new(client.clone()).await)),
             installations: installations.clone(),
             locations: locations.clone(),
             servers: servers.clone(),
+            events: events.clone(),
             config,
             client,
 
             panic_bool,
         });
 
+        events.write().await.run(instance.clone()).await;
         servers.write().await.run(instance.clone()).await;
         locations.write().await.run(instance.clone()).await;
         installations.write().await.run(instance.clone()).await;
@@ -54,10 +59,18 @@ impl AppState {
     }
 
     pub async fn watch_task(&self, task: JoinHandle<TaskResult>) {
-        tokio::spawn(Self::wrap_task(task, self.panic_bool.clone()));
+        tokio::spawn(Self::wrap_task(
+            task,
+            self.panic_bool.clone(),
+            self.events.clone(),
+        ));
     }
 
-    async fn wrap_task(task: JoinHandle<TaskResult>, panic_bool: Arc<AtomicBool>) {
+    async fn wrap_task(
+        task: JoinHandle<TaskResult>,
+        panic_bool: Arc<AtomicBool>,
+        events: Arc<RwLock<EventsState>>,
+    ) {
         match task.await {
             Err(err) => {
                 log::warn!("join error: {:?}", &err);
@@ -69,7 +82,7 @@ impl AppState {
             }
             Ok(result) => {
                 if let Err(err) = result {
-                    log::error!("{}", err);
+                    events.read().await.error(err).await;
                 }
             }
         }
