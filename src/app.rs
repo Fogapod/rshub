@@ -5,16 +5,22 @@ use std::{collections::HashMap, sync::Arc};
 use tui::backend::CrosstermBackend;
 use tui::terminal::Frame;
 
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEventKind};
-
 use crate::config::AppConfig;
+use crate::datatypes::game_version::GameVersion;
+use crate::datatypes::server::Address;
 use crate::input::UserInput;
 use crate::states::app::AppState;
+use crate::states::installations::VersionOperation;
 use crate::views::{events::EventsView, tabs::TabView, world::World, AppView, Drawable, ViewType};
 
 pub enum AppAction {
     OpenView(ViewType),
     CloseView,
+    LaunchVersion(GameVersion),
+    ConnectToServer {
+        version: GameVersion,
+        address: Address,
+    },
     Exit,
 }
 
@@ -80,88 +86,47 @@ impl App {
         }
     }
 
-    pub(crate) async fn on_input(&mut self, event: &Event) {
-        let input = match event {
-            Event::Key(key) => match key {
-                KeyEvent {
-                    code: KeyCode::Char('c' | 'C'),
-                    modifiers: KeyModifiers::CONTROL,
-                } => {
-                    self.stop();
-                    None
-                }
-                KeyEvent {
-                    code: KeyCode::Char(c),
-                    ..
-                } => Some(UserInput::Char(c)),
-                KeyEvent {
-                    code: KeyCode::Left,
-                    ..
-                } => Some(UserInput::Left),
-                KeyEvent {
-                    code: KeyCode::Right,
-                    ..
-                } => Some(UserInput::Right),
-                KeyEvent {
-                    code: KeyCode::Up, ..
-                } => Some(UserInput::Up),
-                KeyEvent {
-                    code: KeyCode::Down,
-                    ..
-                } => Some(UserInput::Down),
-                KeyEvent {
-                    code: KeyCode::Home,
-                    ..
-                } => Some(UserInput::Top),
-                KeyEvent {
-                    code: KeyCode::End, ..
-                } => Some(UserInput::Bottom),
-                KeyEvent {
-                    code: KeyCode::Esc, ..
-                } => Some(UserInput::Back),
-                KeyEvent {
-                    code: KeyCode::Enter,
-                    ..
-                } => Some(UserInput::Enter),
-                KeyEvent {
-                    code: KeyCode::Delete | KeyCode::Backspace,
-                    ..
-                } => Some(UserInput::Delete),
-                KeyEvent {
-                    code: KeyCode::Tab, ..
-                } => Some(UserInput::Tab),
-                KeyEvent {
-                    code: KeyCode::F(1),
-                    ..
-                } => Some(UserInput::Help),
-                KeyEvent {
-                    code: KeyCode::F(5),
-                    ..
-                } => Some(UserInput::Refresh),
-                _ => None,
-            },
-            Event::Mouse(mouse) => match mouse.kind {
-                MouseEventKind::ScrollUp => Some(UserInput::Up),
-                MouseEventKind::ScrollDown => Some(UserInput::Down),
-                _ => None,
-            },
-            _ => None,
-        };
-
-        if let Some(input) = input {
-            if let Some(top_widget_type) = self.view_stack.last() {
-                if let Some(widget) = self.views.get_mut(top_widget_type) {
-                    if let Some(action) = widget.on_input(&input, self.state.clone()).await {
-                        match action {
-                            AppAction::OpenView(view) => {
-                                self.view_stack.push(view);
-                            }
-                            AppAction::CloseView => {
-                                self.view_stack.pop();
-                            }
-                            AppAction::Exit => {
-                                self.stop();
-                            }
+    pub(crate) async fn on_input(&mut self, input: &UserInput) {
+        if let Some(top_widget_type) = self.view_stack.last() {
+            if let Some(widget) = self.views.get_mut(top_widget_type) {
+                if let Some(action) = widget.on_input(input, self.state.clone()).await {
+                    match action {
+                        AppAction::OpenView(view) => {
+                            self.view_stack.push(view);
+                        }
+                        AppAction::LaunchVersion(version) => {
+                            self.state
+                                .installations
+                                .read()
+                                .await
+                                .operation(
+                                    self.state.clone(),
+                                    VersionOperation::Launch {
+                                        version,
+                                        address: None,
+                                    },
+                                )
+                                .await;
+                        }
+                        AppAction::ConnectToServer { version, address } => {
+                            self.state
+                                .installations
+                                .read()
+                                .await
+                                .operation(
+                                    self.state.clone(),
+                                    VersionOperation::Launch {
+                                        version,
+                                        address: Some(address),
+                                    },
+                                )
+                                .await;
+                        }
+                        AppAction::CloseView => {
+                            self.view_stack.pop();
+                        }
+                        AppAction::Exit => {
+                            self.stop();
                         }
                     }
                 }

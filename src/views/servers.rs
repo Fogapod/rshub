@@ -8,7 +8,7 @@ use tui::terminal::Frame;
 use crate::app::AppAction;
 use crate::datatypes::server::Server;
 use crate::input::UserInput;
-use crate::states::{AppState, StatelessList, VersionOperation};
+use crate::states::{AppState, StatelessList};
 use crate::views::{Drawable, InputProcessor};
 
 use tui::{
@@ -35,21 +35,17 @@ impl ServerView {
 impl InputProcessor for ServerView {
     async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
         match input {
-            // TODO: enter with both functions
             UserInput::Enter => {
                 if let Some(i) = self.state.selected() {
-                    app.installations
-                        .read()
-                        .await
-                        .operation(
-                            app.clone(),
-                            VersionOperation::Install(
-                                app.installations.read().await.items[i].version.clone(),
-                            ),
-                        )
-                        .await;
+                    let server = &app.servers.read().await.items[i];
+
+                    Some(AppAction::ConnectToServer {
+                        version: server.version.clone(),
+                        address: server.address.clone(),
+                    })
+                } else {
+                    None
                 }
-                None
             }
             _ => self.state.on_input(input, app.servers.read().await.count()),
         }
@@ -201,7 +197,7 @@ async fn draw_server_info(
     selected: &Server,
 ) {
     let selected_location =
-        if let Some(location) = app.locations.read().await.items.get(&selected.ip) {
+        if let Some(location) = app.locations.read().await.items.get(&selected.address.ip) {
             format!("{}/{}", location.country, location.city)
         } else {
             "unknown".to_owned()
@@ -217,7 +213,7 @@ async fn draw_server_info(
             format!("time     : {}", selected.time),
         ]),
         Row::new(vec![
-            format!("address : {}:{}", selected.ip, selected.port,),
+            format!("address : {}", selected.address),
             format!("location : {}", selected_location),
         ]),
     ];

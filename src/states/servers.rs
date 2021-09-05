@@ -9,7 +9,7 @@ use crate::config::AppConfig;
 use crate::constants::SERVER_LIST_URL;
 use crate::datatypes::game_version::{DownloadUrl, GameVersion};
 use crate::datatypes::geolocation::IP;
-use crate::datatypes::server::{Server, ServerListData};
+use crate::datatypes::server::{Address, Server, ServerListData};
 use crate::states::app::{AppState, TaskResult};
 use crate::states::installations::VersionOperation;
 
@@ -50,7 +50,10 @@ impl ServersState {
 
             self.items.push(Server {
                 name: "TEST SERVER PLEASE IGNORE".to_owned(),
-                ip: ip.clone(),
+                address: Address {
+                    ip: ip.clone(),
+                    port: 22,
+                },
                 offline: true,
                 version: version.clone(),
                 fps: 42,
@@ -58,7 +61,6 @@ impl ServersState {
                 gamemode: "FFA".to_owned(),
                 players: 7,
                 map: "world".to_owned(),
-                port: 22,
             });
 
             let _ = app.locations.write().await.resolve(ip);
@@ -76,8 +78,11 @@ impl ServersState {
     }
 
     pub async fn update(&mut self, app: Arc<AppState>, data: ServerListData) -> Result<()> {
-        let mut previously_online: HashMap<IP, &mut Server> =
-            self.items.iter_mut().map(|i| (i.ip.clone(), i)).collect();
+        let mut previously_online: HashMap<IP, &mut Server> = self
+            .items
+            .iter_mut()
+            .map(|i| (i.address.ip.clone(), i))
+            .collect();
 
         let mut created_servers: Vec<Server> = Vec::new();
 

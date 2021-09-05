@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
@@ -96,12 +98,23 @@ pub struct ServerListData {
 }
 
 #[derive(Debug, Clone)]
+pub struct Address {
+    pub ip: IP,
+    pub port: u32,
+}
+
+impl fmt::Display for Address {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.ip, self.port)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Server {
     pub name: String,
     pub players: u32,
     pub version: GameVersion,
-    pub ip: IP,
-    pub port: u32,
+    pub address: Address,
     pub map: String,
     pub gamemode: String,
     pub time: String,
@@ -130,10 +143,9 @@ impl Server {
             gamemode,
             time,
             players,
-            port,
             fps,
-            ip,
             version,
+            address: Address { ip, port },
             // updated: true,
             offline: false,
         }

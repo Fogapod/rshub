@@ -3,18 +3,20 @@ use std::sync::Arc;
 
 use bytesize::ByteSize;
 
-use anyhow::{bail, Context};
+use anyhow::{anyhow, bail, Context};
 
 use futures::stream::StreamExt;
 
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
+use tokio::process::Command;
 use tokio::sync::RwLock;
 
 use crate::config::AppConfig;
 use crate::datatypes::{
     game_version::{DownloadUrl, GameVersion},
     installation::{Installation, InstallationKind},
+    server::Address,
     value_sorted_map::ValueSortedMap,
 };
 use crate::states::app::{AppState, TaskResult};
@@ -22,9 +24,12 @@ use crate::states::app::{AppState, TaskResult};
 #[derive(Debug)]
 pub enum VersionOperation {
     Discover(GameVersion),
-    Install(GameVersion),
     AbortInstall(GameVersion),
     Uninstall(GameVersion),
+    Launch {
+        version: GameVersion,
+        address: Option<Address>,
+    },
 }
 
 pub struct InstallationsState {
@@ -175,11 +180,13 @@ impl InstallationsState {
             VersionOperation::Discover(version) => {
                 tokio::spawn(Self::version_discovered(app, version))
             }
-            VersionOperation::Install(version) => tokio::spawn(Self::install(app, version)),
             VersionOperation::AbortInstall(version) => {
                 tokio::spawn(Self::abort_installation(app, version))
             }
             VersionOperation::Uninstall(version) => tokio::spawn(Self::uninstall(app, version)),
+            VersionOperation::Launch { version, address } => {
+                tokio::spawn(Self::launch(app, version, address))
+            }
         };
 
         app_clone.watch_task(f).await;
@@ -460,6 +467,70 @@ impl InstallationsState {
             .await
             .event(&format!("Uninstalled {}", version))
             .await;
+
+        Ok(())
+    }
+
+    async fn launch(
+        app: Arc<AppState>,
+        version: GameVersion,
+        address: Option<Address>,
+    ) -> TaskResult {
+        app.events
+            .read()
+            .await
+            .event(&format!("Launching {}", version))
+            .await;
+
+        if !matches!(
+            app.installations
+                .read()
+                .await
+                .items
+                .get(&version)
+                .ok_or_else(|| anyhow!("desync: version not in installation list"))?,
+            Installation {
+                kind: InstallationKind::Installed { .. },
+                ..
+            }
+        ) {
+            Self::install(app.clone(), version)
+                .await
+                .with_context(|| "Unable to install")?;
+        } else {
+            // https://github.com/unitystation/stationhub/blob/cebb9d45bff0a1c019852795a471068ba89d770a/UnitystationLauncher/Models/Installation.cs#L33-L104
+            let mut path = app.config.dirs.installations_dir.clone();
+            path.push(PathBuf::from(version.clone()));
+
+            #[cfg(target_family = "unix")]
+            let executable = "Unitystation";
+            #[cfg(target_os = "windows")]
+            let executable = "Unitystation.exe";
+
+            path.push(executable);
+
+            let mut command = Command::new(&path);
+            //command.current_dir(&path);
+
+            if let Some(address) = address {
+                command
+                    .arg("--server")
+                    .arg(address.ip.to_string())
+                    .arg("--port")
+                    .arg(address.port.to_string())
+                    // these are required for custom port and server because of bug
+                    .arg("--refreshtoken")
+                    .arg("gibberish")
+                    .arg("--uid")
+                    .arg("gibberish");
+            }
+
+            log::info!("{:?} {:?}", &path, &command);
+            command
+                .spawn()
+                .with_context(|| "Unable to launch installation")?;
+            drop(command);
+        }
 
         Ok(())
     }

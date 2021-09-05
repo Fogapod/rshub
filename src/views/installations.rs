@@ -77,6 +77,15 @@ impl InputProcessor for InstallationView {
                 }
                 None
             }
+            UserInput::Enter => {
+                if let Some(i) = self.state.selected() {
+                    Some(AppAction::LaunchVersion(
+                        app.installations.read().await.items[i].version.clone(),
+                    ))
+                } else {
+                    None
+                }
+            }
             _ => self
                 .state
                 .on_input(input, app.installations.read().await.count()),

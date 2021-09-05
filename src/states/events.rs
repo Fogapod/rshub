@@ -19,7 +19,7 @@ impl fmt::Display for AppEvent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Event(text) => write!(f, "{}", text),
-            Self::Error(err) => write!(f, "{}", err),
+            Self::Error(err) => write!(f, "{:#}", err),
         }
     }
 }
@@ -58,7 +58,7 @@ impl EventsState {
     }
 
     pub async fn error(&self, err: anyhow::Error) {
-        log::debug!("error: {}", &err);
+        log::debug!("error: {:#}", &err);
 
         if let Err(err) = self.events.send(AppEvent::Error(err)) {
             log::error!("error sending error: {}", err);

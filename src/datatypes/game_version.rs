@@ -136,6 +136,6 @@ impl Ord for GameVersion {
 
 impl From<GameVersion> for PathBuf {
     fn from(version: GameVersion) -> Self {
-        PathBuf::from(format!("{}/{}/", version.fork, version.build))
+        PathBuf::from(format!("{}/{}", version.fork, version.build))
     }
 }

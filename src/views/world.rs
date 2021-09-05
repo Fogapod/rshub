@@ -60,7 +60,7 @@ impl Drawable for World {
 
                 if let Some(user_location) = locations.get(&IP::Local) {
                     for sv in servers {
-                        if let Some(location) = locations.get(&sv.ip) {
+                        if let Some(location) = locations.get(&sv.address.ip) {
                             ctx.draw(&Line {
                                 x1: user_location.longitude,
                                 y1: user_location.latitude,
@@ -81,7 +81,7 @@ impl Drawable for World {
 
                 // separate loop to draw on top of lines
                 for sv in servers {
-                    if let Some(location) = locations.get(&sv.ip) {
+                    if let Some(location) = locations.get(&sv.address.ip) {
                         let color = if sv.players != 0 {
                             Color::Green
                         } else {
