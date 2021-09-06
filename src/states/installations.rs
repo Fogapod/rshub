@@ -525,11 +525,9 @@ impl InstallationsState {
                     .arg("gibberish");
             }
 
-            log::info!("{:?} {:?}", &path, &command);
             command
                 .spawn()
                 .with_context(|| "Unable to launch installation")?;
-            drop(command);
         }
 
         Ok(())
