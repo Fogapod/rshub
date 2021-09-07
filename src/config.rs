@@ -22,6 +22,9 @@ struct CliArgs {
     /// Geolocation provider (ifconfig.co compatible)
     #[clap(long, default_value = DEFAULT_GEO_PROVIDER_URL)]
     geo_provider: reqwest::Url,
+    /// Offline mode
+    #[clap(long)]
+    offline: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -72,20 +75,28 @@ pub struct AppConfig {
     pub update_interval: u64,
     pub verbose: u32,
     pub geo_provider: reqwest::Url,
+    pub offline: bool,
 
     pub dirs: AppDirs,
 }
 
 impl AppConfig {
     pub fn new() -> Result<Self, io::Error> {
-        let args = CliArgs::parse();
+        let CliArgs {
+            log_file,
+            update_interval,
+            verbose,
+            geo_provider,
+            offline,
+        } = CliArgs::parse();
 
         Ok(Self {
-            dirs: AppDirs::new(args.log_file)?,
+            dirs: AppDirs::new(log_file)?,
 
-            update_interval: args.update_interval,
-            verbose: args.verbose,
-            geo_provider: args.geo_provider,
+            update_interval,
+            verbose,
+            geo_provider,
+            offline,
         })
     }
 }

@@ -36,9 +36,6 @@ impl ServersState {
     }
 
     pub async fn run(&mut self, app: Arc<AppState>) {
-        app.watch_task(tokio::task::spawn(Self::server_fetch_task(app.clone())))
-            .await;
-
         #[cfg(debug_assertions)]
         {
             let ip = IP::Remote("8.8.8.8".to_owned());
@@ -67,6 +64,13 @@ impl ServersState {
 
             let _ = InstallationsState::version_discovered(Arc::clone(&app), &version).await;
         }
+
+        if app.config.offline {
+            return;
+        }
+
+        app.watch_task(tokio::task::spawn(Self::server_fetch_task(app.clone())))
+            .await;
     }
 
     pub fn count(&self) -> usize {
@@ -90,6 +94,7 @@ impl ServersState {
                 // version changed (download/build/fork)
                 if known_server.version != version {
                     InstallationsState::version_discovered(Arc::clone(&app), &version).await?;
+                    known_server.version = version;
                 }
 
                 // if calculate_hash(&known_server.data) != calculate_hash(&sv) {

@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use bytesize::ByteSize;
 
+use crossterm::event::KeyCode;
+
 use tui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -15,8 +17,9 @@ use tui::{
 use crate::app::AppAction;
 use crate::datatypes::{game_version::DownloadUrl, installation::InstallationKind};
 use crate::input::UserInput;
+use crate::states::help::HotKey;
 use crate::states::{AppState, StatelessList};
-use crate::views::{Drawable, InputProcessor};
+use crate::views::{Drawable, HotKeys, InputProcessor, Named};
 
 pub struct InstallationView {
     state: StatelessList<TableState>,
@@ -27,6 +30,33 @@ impl InstallationView {
         Self {
             state: StatelessList::new(TableState::default(), false),
         }
+    }
+}
+
+impl Named for InstallationView {
+    fn name(&self) -> String {
+        "Installation List".to_owned()
+    }
+}
+
+impl HotKeys for InstallationView {
+    fn hotkeys(&self) -> Vec<HotKey> {
+        let mut hotkeys = vec![
+            HotKey {
+                description: "Refresh installations list",
+                key: KeyCode::F(5),
+                modifiers: None,
+            },
+            HotKey {
+                description: "Run selected version (installs if needed)",
+                key: KeyCode::Enter,
+                modifiers: None,
+            },
+        ];
+
+        hotkeys.append(&mut self.state.hotkeys());
+
+        hotkeys
     }
 }
 

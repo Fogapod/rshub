@@ -1,6 +1,8 @@
 use std::io;
 use std::sync::Arc;
 
+use crossterm::event::KeyCode;
+
 use tui::backend::CrosstermBackend;
 use tui::layout::Rect;
 use tui::terminal::Frame;
@@ -8,8 +10,9 @@ use tui::terminal::Frame;
 use crate::app::AppAction;
 use crate::datatypes::server::Server;
 use crate::input::UserInput;
+use crate::states::help::HotKey;
 use crate::states::{AppState, StatelessList};
-use crate::views::{Drawable, InputProcessor};
+use crate::views::{Drawable, HotKeys, InputProcessor, Named, ViewType};
 
 use tui::{
     layout::{Alignment, Constraint, Direction, Layout},
@@ -31,10 +34,38 @@ impl ServerView {
     }
 }
 
+impl Named for ServerView {
+    fn name(&self) -> String {
+        "Server List".to_owned()
+    }
+}
+
+impl HotKeys for ServerView {
+    fn hotkeys(&self) -> Vec<HotKey> {
+        let mut hotkeys = vec![
+            HotKey {
+                description: "Show world map",
+                key: KeyCode::Char('m'),
+                modifiers: None,
+            },
+            HotKey {
+                description: "Connect to selected server (installs version if needed)",
+                key: KeyCode::Enter,
+                modifiers: None,
+            },
+        ];
+
+        hotkeys.append(&mut self.state.hotkeys());
+
+        hotkeys
+    }
+}
+
 #[async_trait::async_trait]
 impl InputProcessor for ServerView {
     async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
         match input {
+            UserInput::Char('m' | 'M') => Some(AppAction::OpenView(ViewType::World)),
             UserInput::Enter => {
                 if let Some(i) = self.state.selected() {
                     let server = &app.servers.read().await.items[i];
@@ -304,7 +335,7 @@ fn draw_info(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: &AppS
     f.render_widget(
         Paragraph::new(Text::from(format!(
             r#"
- F1 (not yet implemented)
+ F1
  {}
  {}"#,
             if cfg!(debug_assertions) {

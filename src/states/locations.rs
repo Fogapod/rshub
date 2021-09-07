@@ -29,6 +29,10 @@ impl LocationsState {
     }
 
     pub async fn run(&mut self, app: Arc<AppState>) {
+        if app.config.offline {
+            return;
+        }
+
         let queue_recv = if let Some(queue_recv) = self.queue_recv.take() {
             queue_recv
         } else {

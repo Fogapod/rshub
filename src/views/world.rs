@@ -11,12 +11,15 @@ use tui::{
     Frame,
 };
 
+use crossterm::event::KeyCode;
+
 use crate::app::AppAction;
 
 use crate::datatypes::geolocation::IP;
 use crate::input::UserInput;
+use crate::states::help::HotKey;
 use crate::states::AppState;
-use crate::views::{AppView, Drawable, InputProcessor};
+use crate::views::{AppView, Drawable, HotKeys, InputProcessor, Named};
 
 pub struct World {}
 
@@ -24,7 +27,6 @@ pub struct World {}
 impl InputProcessor for World {
     async fn on_input(&mut self, input: &UserInput, _: Arc<AppState>) -> Option<AppAction> {
         match input {
-            UserInput::Char('q' | 'Q') => Some(AppAction::Exit),
             UserInput::Char('m' | 'M') | UserInput::Back => Some(AppAction::CloseView),
             _ => None,
         }
@@ -32,6 +34,29 @@ impl InputProcessor for World {
 }
 
 impl AppView for World {}
+
+impl Named for World {
+    fn name(&self) -> String {
+        "World Map".to_owned()
+    }
+}
+
+impl HotKeys for World {
+    fn hotkeys(&self) -> Vec<HotKey> {
+        vec![
+            HotKey {
+                description: "Close map",
+                key: KeyCode::Char('m'),
+                modifiers: None,
+            },
+            HotKey {
+                description: "Close map",
+                key: KeyCode::Esc,
+                modifiers: None,
+            },
+        ]
+    }
+}
 
 #[async_trait::async_trait]
 impl Drawable for World {

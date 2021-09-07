@@ -12,8 +12,9 @@ use tui::{
 
 use crate::app::AppAction;
 use crate::input::UserInput;
+use crate::states::help::HotKey;
 use crate::states::{AppState, CommitState, StatelessList};
-use crate::views::{Drawable, InputProcessor};
+use crate::views::{Drawable, HotKeys, InputProcessor, Named};
 
 pub struct CommitView {
     // TODO:
@@ -30,6 +31,19 @@ impl CommitView {
             loaded: false,
             state: StatelessList::new(ListState::default(), false),
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl Named for CommitView {
+    fn name(&self) -> String {
+        "Recent Commit List".to_owned()
+    }
+}
+
+impl HotKeys for CommitView {
+    fn hotkeys(&self) -> Vec<HotKey> {
+        self.state.hotkeys()
     }
 }
 
@@ -105,8 +119,10 @@ impl Drawable for CommitView {
         }
 
         if !self.loaded {
-            app.watch_task(tokio::spawn(CommitState::load(app.commits.clone())))
-                .await;
+            if !app.config.offline {
+                app.watch_task(tokio::spawn(CommitState::load(app.commits.clone())))
+                    .await;
+            }
 
             self.loaded = true;
         }

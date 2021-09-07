@@ -1,5 +1,6 @@
 pub mod commits;
 pub mod events;
+pub mod help;
 pub mod installations;
 pub mod servers;
 pub mod tabs;
@@ -14,12 +15,14 @@ use tui::terminal::Frame;
 
 use crate::app::AppAction;
 use crate::input::UserInput;
+use crate::states::help::HotKey;
 use crate::states::AppState;
 
 #[derive(PartialEq, Eq, Hash, Debug)]
 pub enum ViewType {
     Tab,
     World,
+    Help,
 }
 
 #[async_trait::async_trait]
@@ -37,4 +40,14 @@ pub trait InputProcessor {
     async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction>;
 }
 
-pub trait AppView: Drawable + InputProcessor {}
+pub trait HotKeys {
+    fn hotkeys(&self) -> Vec<HotKey> {
+        Vec::new()
+    }
+}
+
+pub trait Named {
+    fn name(&self) -> String;
+}
+
+pub trait AppView: Drawable + InputProcessor + HotKeys + Named {}

@@ -11,7 +11,9 @@ use crate::datatypes::game_version::GameVersion;
 use crate::datatypes::server::Address;
 use crate::input::UserInput;
 use crate::states::app::AppState;
-use crate::views::{events::EventsView, tabs::TabView, world::World, AppView, Drawable, ViewType};
+use crate::views::{
+    events::EventsView, help::Help, tabs::TabView, world::World, AppView, Drawable, ViewType,
+};
 
 #[derive(Debug)]
 pub enum AppAction {
@@ -26,7 +28,6 @@ pub enum AppAction {
         version: GameVersion,
         address: Address,
     },
-    Exit,
 }
 
 pub struct App {
@@ -60,6 +61,7 @@ impl App {
 
         instance.register_view(ViewType::Tab, Box::new(TabView::new()));
         instance.register_view(ViewType::World, Box::new(World {}));
+        instance.register_view(ViewType::Help, Box::new(Help {}));
 
         instance
     }
@@ -92,20 +94,37 @@ impl App {
     }
 
     pub(crate) async fn on_input(&mut self, input: &UserInput) {
-        if let Some(top_widget_type) = self.view_stack.last() {
-            if let Some(widget) = self.views.get_mut(top_widget_type) {
-                if let Some(action) = widget.on_input(input, self.state.clone()).await {
-                    match action {
-                        AppAction::OpenView(view) => {
-                            self.view_stack.push(view);
+        log::debug!("input: {:?}", input);
+
+        match input {
+            UserInput::Quit => self.stop(),
+            UserInput::Help => {
+                if let Some(top_view_type) = self.view_stack.last() {
+                    if top_view_type == &ViewType::Help {
+                        return;
+                    }
+                    if let Some(top_view) = self.views.get(top_view_type) {
+                        self.view_stack.push(ViewType::Help);
+                        self.state
+                            .display_help(&top_view.name(), &top_view.hotkeys());
+                    }
+                }
+            }
+            _ => {
+                if let Some(top_widget_type) = self.view_stack.last() {
+                    if let Some(widget) = self.views.get_mut(top_widget_type) {
+                        if let Some(action) = widget.on_input(input, self.state.clone()).await {
+                            match action {
+                                AppAction::OpenView(view) => {
+                                    self.view_stack.push(view);
+                                }
+                                AppAction::CloseView => {
+                                    self.view_stack.pop();
+                                }
+
+                                _ => self.state.on_action(&action, Arc::clone(&self.state)).await,
+                            }
                         }
-                        AppAction::CloseView => {
-                            self.view_stack.pop();
-                        }
-                        AppAction::Exit => {
-                            self.stop();
-                        }
-                        _ => self.state.on_action(&action, Arc::clone(&self.state)).await,
                     }
                 }
             }

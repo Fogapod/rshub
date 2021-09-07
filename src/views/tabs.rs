@@ -1,6 +1,8 @@
 use std::io;
 use std::sync::Arc;
 
+use crossterm::event::KeyCode;
+
 use tui::layout::Rect;
 use tui::{
     backend::CrosstermBackend,
@@ -18,10 +20,11 @@ use futures::stream::{self, StreamExt};
 use crate::app::AppAction;
 
 use crate::input::UserInput;
+use crate::states::help::HotKey;
 use crate::states::{AppState, StatelessList};
 use crate::views::{
     commits::CommitView, installations::InstallationView, servers::ServerView, AppView, Drawable,
-    InputProcessor, ViewType,
+    HotKeys, InputProcessor, Named,
 };
 
 #[derive(Copy, Clone)]
@@ -95,11 +98,60 @@ impl TabView {
     }
 }
 
+impl AppView for TabView {}
+
+impl Named for TabView {
+    fn name(&self) -> String {
+        format!(
+            "Tab: {}",
+            match self.selected_tab() {
+                Tab::Servers => self.view_servers.name(),
+                Tab::Installations => self.view_installations.name(),
+                Tab::Commits => self.view_commits.name(),
+            }
+        )
+    }
+}
+
+impl HotKeys for TabView {
+    fn hotkeys(&self) -> Vec<HotKey> {
+        let mut hotkeys = vec![
+            HotKey {
+                description: "Go to next tab",
+                key: KeyCode::Tab,
+                modifiers: None,
+            },
+            HotKey {
+                description: "Go Servers tab",
+                key: KeyCode::Char('s'),
+                modifiers: None,
+            },
+            HotKey {
+                description: "Go Installations tab",
+                key: KeyCode::Char('i'),
+                modifiers: None,
+            },
+            HotKey {
+                description: "Go Commits tab",
+                key: KeyCode::Char('c'),
+                modifiers: None,
+            },
+        ];
+
+        hotkeys.append(&mut match self.selected_tab() {
+            Tab::Servers => self.view_servers.hotkeys(),
+            Tab::Installations => self.view_installations.hotkeys(),
+            Tab::Commits => self.view_commits.hotkeys(),
+        });
+
+        hotkeys
+    }
+}
+
 #[async_trait::async_trait]
 impl InputProcessor for TabView {
     async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
         match input {
-            UserInput::Char('q' | 'Q') => Some(AppAction::Exit),
             UserInput::Char('s' | 'S') => {
                 self.select_tab(Tab::Servers);
                 None
@@ -111,13 +163,6 @@ impl InputProcessor for TabView {
             UserInput::Char('c' | 'C') => {
                 self.select_tab(Tab::Commits);
                 None
-            }
-            UserInput::Char('m' | 'M') => {
-                if matches!(self.selected_tab(), Tab::Servers) {
-                    Some(AppAction::OpenView(ViewType::World))
-                } else {
-                    None
-                }
             }
             UserInput::Tab => {
                 self.state.select_next(Tab::tab_count());
@@ -133,8 +178,6 @@ impl InputProcessor for TabView {
         }
     }
 }
-
-impl AppView for TabView {}
 
 #[async_trait::async_trait]
 impl Drawable for TabView {

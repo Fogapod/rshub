@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
@@ -10,6 +10,8 @@ use crate::app::AppAction;
 use crate::config::AppConfig;
 use crate::constants::USER_AGENT;
 use crate::states::events::EventsState;
+use crate::states::help::HelpState;
+use crate::states::help::HotKey;
 use crate::states::{CommitState, InstallationsState, LocationsState, ServersState};
 
 pub type TaskResult = Result<()>;
@@ -21,6 +23,8 @@ pub struct AppState {
     pub locations: Arc<RwLock<LocationsState>>,
     pub servers: Arc<RwLock<ServersState>>,
     pub events: Arc<RwLock<EventsState>>,
+
+    pub help: Mutex<HelpState>,
 
     pub client: reqwest::Client,
 
@@ -47,6 +51,8 @@ impl AppState {
             events: events.clone(),
             config,
             client,
+
+            help: Mutex::new(HelpState::new()),
 
             panic_bool,
         });
@@ -80,12 +86,19 @@ impl AppState {
                 AppAction::UninstallVersion(version) => Some(tokio::spawn(
                     InstallationsState::uninstall(Arc::clone(&app), version.clone()),
                 )),
+
                 _ => None,
             };
 
         if let Some(f) = f {
             self.watch_task(f).await;
         }
+    }
+
+    pub fn display_help(&self, view_name: &str, keys: &[HotKey]) {
+        let mut help = self.help.lock().unwrap();
+        help.set_name(view_name);
+        help.set_hotkeys(keys);
     }
 
     pub async fn watch_task(&self, task: JoinHandle<TaskResult>) {

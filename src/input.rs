@@ -6,6 +6,8 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEventK
 
 #[derive(Debug)]
 pub enum UserInput {
+    // hardcoded global inputs
+    Help,
     Quit,
 
     // directions
@@ -22,7 +24,6 @@ pub enum UserInput {
     Delete,
     // misc
     Tab,
-    Help,
     Refresh,
     // custom
     Char(char),
@@ -35,6 +36,10 @@ impl UserInput {
                 KeyEvent {
                     code: KeyCode::Char('c' | 'C'),
                     modifiers: KeyModifiers::CONTROL,
+                }
+                | KeyEvent {
+                    code: KeyCode::Char('q' | 'Q'),
+                    ..
                 } => Some(Self::Quit),
                 KeyEvent {
                     code: KeyCode::Char(c),

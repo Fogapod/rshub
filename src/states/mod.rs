@@ -1,6 +1,7 @@
 pub mod app;
 pub mod commits;
 pub mod events;
+pub mod help;
 pub mod installations;
 pub mod locations;
 pub mod servers;
@@ -11,10 +12,13 @@ pub use installations::InstallationsState;
 pub use locations::LocationsState;
 pub use servers::ServersState;
 
+use crossterm::event::KeyCode;
+
 use tui::widgets::{ListState, TableState};
 
 use crate::app::AppAction;
 use crate::input::UserInput;
+use crate::states::help::HotKey;
 
 // tui states look same, but do not implement trait, so I made one
 pub trait TuiState {
@@ -139,5 +143,35 @@ impl<T: TuiState> StatelessList<T> {
             }
             _ => None,
         }
+    }
+
+    pub fn hotkeys(&self) -> Vec<HotKey> {
+        vec![
+            HotKey {
+                description: "Go up (scrollwheel support)",
+                key: KeyCode::Up,
+                modifiers: None,
+            },
+            HotKey {
+                description: "Go down (scrollwheel support)",
+                key: KeyCode::Down,
+                modifiers: None,
+            },
+            HotKey {
+                description: "Unselect",
+                key: KeyCode::Esc,
+                modifiers: None,
+            },
+            HotKey {
+                description: "Go to top",
+                key: KeyCode::Home,
+                modifiers: None,
+            },
+            HotKey {
+                description: "Go to bottom",
+                key: KeyCode::End,
+                modifiers: None,
+            },
+        ]
     }
 }
