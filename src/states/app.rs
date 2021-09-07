@@ -6,6 +6,7 @@ use tokio::task::JoinHandle;
 
 use anyhow::Result;
 
+use crate::app::AppAction;
 use crate::config::AppConfig;
 use crate::constants::USER_AGENT;
 use crate::states::events::EventsState;
@@ -56,6 +57,35 @@ impl AppState {
         installations.write().await.run(instance.clone()).await;
 
         instance
+    }
+
+    pub async fn on_action(&self, action: &AppAction, app: Arc<AppState>) {
+        log::debug!("action: {:?}", &action);
+
+        let f =
+            match action {
+                AppAction::ConnectToServer { version, address } => {
+                    Some(tokio::spawn(InstallationsState::launch(
+                        Arc::clone(&app),
+                        version.clone(),
+                        Some(address.clone()),
+                    )))
+                }
+                AppAction::LaunchVersion(version) => Some(tokio::spawn(
+                    InstallationsState::launch(Arc::clone(&app), version.clone(), None),
+                )),
+                AppAction::AbortVersionInstallation(version) => Some(tokio::spawn(
+                    InstallationsState::abort_installation(Arc::clone(&app), version.clone()),
+                )),
+                AppAction::UninstallVersion(version) => Some(tokio::spawn(
+                    InstallationsState::uninstall(Arc::clone(&app), version.clone()),
+                )),
+                _ => None,
+            };
+
+        if let Some(f) = f {
+            self.watch_task(f).await;
+        }
     }
 
     pub async fn watch_task(&self, task: JoinHandle<TaskResult>) {

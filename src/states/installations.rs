@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::process::Stdio;
 use std::sync::Arc;
 
 use bytesize::ByteSize;
@@ -20,17 +21,6 @@ use crate::datatypes::{
     value_sorted_map::ValueSortedMap,
 };
 use crate::states::app::{AppState, TaskResult};
-
-#[derive(Debug)]
-pub enum VersionOperation {
-    Discover(GameVersion),
-    AbortInstall(GameVersion),
-    Uninstall(GameVersion),
-    Launch {
-        version: GameVersion,
-        address: Option<Address>,
-    },
-}
 
 pub struct InstallationsState {
     pub items: ValueSortedMap<GameVersion, Installation>,
@@ -171,33 +161,12 @@ impl InstallationsState {
             .await;
     }
 
-    pub async fn operation(&self, app: Arc<AppState>, operation: VersionOperation) {
-        log::debug!("version operation: {:?}", &operation);
-
-        let app_clone = app.clone();
-
-        let f = match operation {
-            VersionOperation::Discover(version) => {
-                tokio::spawn(Self::version_discovered(app, version))
-            }
-            VersionOperation::AbortInstall(version) => {
-                tokio::spawn(Self::abort_installation(app, version))
-            }
-            VersionOperation::Uninstall(version) => tokio::spawn(Self::uninstall(app, version)),
-            VersionOperation::Launch { version, address } => {
-                tokio::spawn(Self::launch(app, version, address))
-            }
-        };
-
-        app_clone.watch_task(f).await;
-    }
-
-    async fn version_discovered(app: Arc<AppState>, version: GameVersion) -> TaskResult {
+    pub async fn version_discovered(app: Arc<AppState>, version: &GameVersion) -> TaskResult {
         log::debug!("discovered: {}", version);
 
         let mut installations = app.installations.write().await;
 
-        if let Some(existing) = installations.items.get(&version).cloned() {
+        if let Some(existing) = installations.items.get(version).cloned() {
             if !matches!(&existing.kind, InstallationKind::Discovered) {
                 log::debug!("not replacing existing {:?} with discovered", existing);
 
@@ -214,7 +183,7 @@ impl InstallationsState {
         installations.items.insert(
             version.clone(),
             Installation {
-                version,
+                version: version.clone(),
                 kind: InstallationKind::Discovered,
             },
         );
@@ -222,7 +191,7 @@ impl InstallationsState {
         Ok(())
     }
 
-    async fn install(app: Arc<AppState>, version: GameVersion) -> TaskResult {
+    pub async fn install(app: Arc<AppState>, version: GameVersion) -> TaskResult {
         let url = match &version.download {
             DownloadUrl::Valid(url) => url,
             DownloadUrl::Untrusted(bad) => {
@@ -406,7 +375,7 @@ impl InstallationsState {
         Ok(())
     }
 
-    async fn abort_installation(app: Arc<AppState>, version: GameVersion) -> TaskResult {
+    pub async fn abort_installation(app: Arc<AppState>, version: GameVersion) -> TaskResult {
         let mut installations = app.installations.write().await;
 
         if matches!(
@@ -436,7 +405,7 @@ impl InstallationsState {
         Ok(())
     }
 
-    async fn uninstall(app: Arc<AppState>, version: GameVersion) -> TaskResult {
+    pub async fn uninstall(app: Arc<AppState>, version: GameVersion) -> TaskResult {
         let mut path = app.config.dirs.installations_dir.clone();
 
         path.push(PathBuf::from(version.clone()));
@@ -471,7 +440,7 @@ impl InstallationsState {
         Ok(())
     }
 
-    async fn launch(
+    pub async fn launch(
         app: Arc<AppState>,
         version: GameVersion,
         address: Option<Address>,
@@ -494,7 +463,7 @@ impl InstallationsState {
                 ..
             }
         ) {
-            Self::install(app.clone(), version)
+            Self::install(app.clone(), version.clone())
                 .await
                 .with_context(|| "Unable to install")?;
         } else {
@@ -502,15 +471,15 @@ impl InstallationsState {
             let mut path = app.config.dirs.installations_dir.clone();
             path.push(PathBuf::from(version.clone()));
 
+            let mut exec_path = path.clone();
+
             #[cfg(target_family = "unix")]
-            let executable = "Unitystation";
+            exec_path.push("Unitystation");
             #[cfg(target_os = "windows")]
-            let executable = "Unitystation.exe";
+            exec_path.push("Unitystation.exe");
 
-            path.push(executable);
-
-            let mut command = Command::new(&path);
-            //command.current_dir(&path);
+            let mut command = Command::new(&exec_path);
+            command.current_dir(&path);
 
             if let Some(address) = address {
                 command
@@ -524,8 +493,10 @@ impl InstallationsState {
                     .arg("--uid")
                     .arg("gibberish");
             }
-
             command
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
                 .spawn()
                 .with_context(|| "Unable to launch installation")?;
         }

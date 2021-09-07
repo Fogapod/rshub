@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use std::io;
 use std::sync::atomic::AtomicBool;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use tui::backend::CrosstermBackend;
 use tui::terminal::Frame;
@@ -10,12 +11,16 @@ use crate::datatypes::game_version::GameVersion;
 use crate::datatypes::server::Address;
 use crate::input::UserInput;
 use crate::states::app::AppState;
-use crate::states::installations::VersionOperation;
 use crate::views::{events::EventsView, tabs::TabView, world::World, AppView, Drawable, ViewType};
 
+#[derive(Debug)]
 pub enum AppAction {
+    // view management
     OpenView(ViewType),
     CloseView,
+    // installations
+    AbortVersionInstallation(GameVersion),
+    UninstallVersion(GameVersion),
     LaunchVersion(GameVersion),
     ConnectToServer {
         version: GameVersion,
@@ -94,40 +99,13 @@ impl App {
                         AppAction::OpenView(view) => {
                             self.view_stack.push(view);
                         }
-                        AppAction::LaunchVersion(version) => {
-                            self.state
-                                .installations
-                                .read()
-                                .await
-                                .operation(
-                                    self.state.clone(),
-                                    VersionOperation::Launch {
-                                        version,
-                                        address: None,
-                                    },
-                                )
-                                .await;
-                        }
-                        AppAction::ConnectToServer { version, address } => {
-                            self.state
-                                .installations
-                                .read()
-                                .await
-                                .operation(
-                                    self.state.clone(),
-                                    VersionOperation::Launch {
-                                        version,
-                                        address: Some(address),
-                                    },
-                                )
-                                .await;
-                        }
                         AppAction::CloseView => {
                             self.view_stack.pop();
                         }
                         AppAction::Exit => {
                             self.stop();
                         }
+                        _ => self.state.on_action(&action, Arc::clone(&self.state)).await,
                     }
                 }
             }

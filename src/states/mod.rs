@@ -7,7 +7,7 @@ pub mod servers;
 
 pub use app::AppState;
 pub use commits::CommitState;
-pub use installations::{InstallationsState, VersionOperation};
+pub use installations::InstallationsState;
 pub use locations::LocationsState;
 pub use servers::ServersState;
 

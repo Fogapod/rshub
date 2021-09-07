@@ -11,7 +11,7 @@ use crate::datatypes::game_version::{DownloadUrl, GameVersion};
 use crate::datatypes::geolocation::IP;
 use crate::datatypes::server::{Address, Server, ServerListData};
 use crate::states::app::{AppState, TaskResult};
-use crate::states::installations::VersionOperation;
+use crate::states::installations::InstallationsState;
 
 // use std::collections::hash_map::DefaultHasher;
 // use std::hash::{Hash, Hasher};
@@ -65,11 +65,7 @@ impl ServersState {
 
             let _ = app.locations.write().await.resolve(ip);
 
-            app.installations
-                .read()
-                .await
-                .operation(app.clone(), VersionOperation::Discover(version))
-                .await;
+            let _ = InstallationsState::version_discovered(Arc::clone(&app), &version).await;
         }
     }
 
@@ -93,11 +89,7 @@ impl ServersState {
             if let Some(known_server) = previously_online.remove(&ip) {
                 // version changed (download/build/fork)
                 if known_server.version != version {
-                    app.installations
-                        .read()
-                        .await
-                        .operation(app.clone(), VersionOperation::Discover(version.clone()))
-                        .await;
+                    InstallationsState::version_discovered(Arc::clone(&app), &version).await?;
                 }
 
                 // if calculate_hash(&known_server.data) != calculate_hash(&sv) {
@@ -109,11 +101,7 @@ impl ServersState {
             } else {
                 created_servers.push(Server::new(ip.clone(), version.clone(), sv));
 
-                app.installations
-                    .read()
-                    .await
-                    .operation(app.clone(), VersionOperation::Discover(version))
-                    .await;
+                InstallationsState::version_discovered(Arc::clone(&app), &version).await?;
 
                 app.locations.write().await.resolve(ip).await?;
             }

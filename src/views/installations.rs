@@ -15,7 +15,7 @@ use tui::{
 use crate::app::AppAction;
 use crate::datatypes::{game_version::DownloadUrl, installation::InstallationKind};
 use crate::input::UserInput;
-use crate::states::{AppState, StatelessList, VersionOperation};
+use crate::states::{AppState, StatelessList};
 use crate::views::{Drawable, InputProcessor};
 
 pub struct InstallationView {
@@ -49,33 +49,21 @@ impl InputProcessor for InstallationView {
             }
             UserInput::Char('d' | 'D') => {
                 if let Some(i) = self.state.selected() {
-                    app.installations
-                        .read()
-                        .await
-                        .operation(
-                            app.clone(),
-                            VersionOperation::Uninstall(
-                                app.installations.read().await.items[i].version.clone(),
-                            ),
-                        )
-                        .await;
+                    Some(AppAction::UninstallVersion(
+                        app.installations.read().await.items[i].version.clone(),
+                    ))
+                } else {
+                    None
                 }
-                None
             }
             UserInput::Char('a' | 'A') => {
                 if let Some(i) = self.state.selected() {
-                    app.installations
-                        .read()
-                        .await
-                        .operation(
-                            app.clone(),
-                            VersionOperation::AbortInstall(
-                                app.installations.read().await.items[i].version.clone(),
-                            ),
-                        )
-                        .await;
+                    Some(AppAction::AbortVersionInstallation(
+                        app.installations.read().await.items[i].version.clone(),
+                    ))
+                } else {
+                    None
                 }
-                None
             }
             UserInput::Enter => {
                 if let Some(i) = self.state.selected() {
