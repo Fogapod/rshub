@@ -17,7 +17,7 @@ UnityStation is a modern remake of Space Station 13 in Unity.
 | show servers on map (useless) | yes | no |
 | written in rust | yes | no |
 
-[1]: even though launching game without auth has major inconveniences, (refer to #Issues), I am not planning to support firebase (unitystation is switching to their own provider) 
+[1]: even though launching game without auth has major inconveniences, (refer to #Issues), I am not planning to support firebase (unitystation is switching to their own provider)
 
 ### Usage
 - Use `--help` to get CLI usage.
@@ -45,5 +45,6 @@ You will have to run `cargo install --path . --features geolocation` to enable i
 
 ### Special thanks (random order)
 - PotatoAlienOf13: for testing and suggestions during initial development and original [idea](https://github.com/PotatoAlienOf13/not-station-hub)
+- kalmari: for answering Rust questions
 - [gitui](https://github.com/extrawurst/gitui) and [bottom](https://github.com/ClementTsang/bottom) for inspiration
 - Unitystation developers for the game
