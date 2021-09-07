@@ -11,9 +11,9 @@ use crate::datatypes::game_version::GameVersion;
 use crate::datatypes::server::Address;
 use crate::input::UserInput;
 use crate::states::app::AppState;
-use crate::views::{
-    events::EventsView, help::Help, tabs::TabView, world::World, AppView, Drawable, ViewType,
-};
+#[cfg(feature = "geolocation")]
+use crate::views::world::World;
+use crate::views::{events::EventsView, help::Help, tabs::TabView, AppView, Drawable, ViewType};
 
 #[derive(Debug)]
 pub enum AppAction {
@@ -60,6 +60,7 @@ impl App {
         };
 
         instance.register_view(ViewType::Tab, Box::new(TabView::new()));
+        #[cfg(feature = "geolocation")]
         instance.register_view(ViewType::World, Box::new(World {}));
         instance.register_view(ViewType::Help, Box::new(Help {}));
 

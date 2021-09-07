@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use clap::Clap;
 
+#[cfg(feature = "geolocation")]
 use crate::constants::DEFAULT_GEO_PROVIDER_URL;
 
 #[derive(Clap, Debug)]
@@ -20,6 +21,7 @@ struct CliArgs {
     #[clap(short, long, parse(from_occurrences))]
     verbose: u32,
     /// Geolocation provider (ifconfig.co compatible)
+    #[cfg(feature = "geolocation")]
     #[clap(long, default_value = DEFAULT_GEO_PROVIDER_URL)]
     geo_provider: reqwest::Url,
     /// Offline mode
@@ -74,6 +76,7 @@ impl AppDirs {
 pub struct AppConfig {
     pub update_interval: u64,
     pub verbose: u32,
+    #[cfg(feature = "geolocation")]
     pub geo_provider: reqwest::Url,
     pub offline: bool,
 
@@ -86,6 +89,7 @@ impl AppConfig {
             log_file,
             update_interval,
             verbose,
+            #[cfg(feature = "geolocation")]
             geo_provider,
             offline,
         } = CliArgs::parse();
@@ -95,6 +99,7 @@ impl AppConfig {
 
             update_interval,
             verbose,
+            #[cfg(feature = "geolocation")]
             geo_provider,
             offline,
         })

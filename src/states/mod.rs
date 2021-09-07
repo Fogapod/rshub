@@ -3,12 +3,14 @@ pub mod commits;
 pub mod events;
 pub mod help;
 pub mod installations;
+#[cfg(feature = "geolocation")]
 pub mod locations;
 pub mod servers;
 
 pub use app::AppState;
 pub use commits::CommitState;
 pub use installations::InstallationsState;
+#[cfg(feature = "geolocation")]
 pub use locations::LocationsState;
 pub use servers::ServersState;
 

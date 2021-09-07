@@ -4,6 +4,7 @@ pub mod help;
 pub mod installations;
 pub mod servers;
 pub mod tabs;
+#[cfg(feature = "geolocation")]
 pub mod world;
 
 use std::io;
@@ -21,6 +22,7 @@ use crate::states::AppState;
 #[derive(PartialEq, Eq, Hash, Debug)]
 pub enum ViewType {
     Tab,
+    #[cfg(feature = "geolocation")]
     World,
     Help,
 }

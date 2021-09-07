@@ -60,6 +60,7 @@ impl ServersState {
                 map: "world".to_owned(),
             });
 
+            #[cfg(feature = "geolocation")]
             let _ = app.locations.write().await.resolve(ip);
 
             let _ = InstallationsState::version_discovered(Arc::clone(&app), &version).await;
@@ -108,6 +109,7 @@ impl ServersState {
 
                 InstallationsState::version_discovered(Arc::clone(&app), &version).await?;
 
+                #[cfg(feature = "geolocation")]
                 app.locations.write().await.resolve(ip).await?;
             }
         }
@@ -139,6 +141,7 @@ impl ServersState {
     async fn server_fetch_task(app: Arc<AppState>) -> TaskResult {
         let update_interval = app.servers.read().await.update_interval;
 
+        #[cfg(feature = "geolocation")]
         if let Err(err) = app.locations.write().await.resolve(IP::Local).await {
             app.events
                 .read()

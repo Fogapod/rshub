@@ -4,6 +4,7 @@ use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
 use crate::datatypes::game_version::GameVersion;
+
 use crate::datatypes::geolocation::IP;
 
 fn deserialize_ok_or_default<'de, T, D>(deserializer: D) -> Result<T, D::Error>

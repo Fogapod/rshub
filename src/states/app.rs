@@ -12,7 +12,9 @@ use crate::constants::USER_AGENT;
 use crate::states::events::EventsState;
 use crate::states::help::HelpState;
 use crate::states::help::HotKey;
-use crate::states::{CommitState, InstallationsState, LocationsState, ServersState};
+#[cfg(feature = "geolocation")]
+use crate::states::LocationsState;
+use crate::states::{CommitState, InstallationsState, ServersState};
 
 pub type TaskResult = Result<()>;
 
@@ -20,6 +22,7 @@ pub struct AppState {
     pub config: AppConfig,
     pub commits: Arc<RwLock<CommitState>>,
     pub installations: Arc<RwLock<InstallationsState>>,
+    #[cfg(feature = "geolocation")]
     pub locations: Arc<RwLock<LocationsState>>,
     pub servers: Arc<RwLock<ServersState>>,
     pub events: Arc<RwLock<EventsState>>,
@@ -38,6 +41,7 @@ impl AppState {
             .build()
             .expect("creating client");
 
+        #[cfg(feature = "geolocation")]
         let locations = Arc::new(RwLock::new(LocationsState::new(&config).await));
         let installations = Arc::new(RwLock::new(InstallationsState::new(&config).await));
         let servers = Arc::new(RwLock::new(ServersState::new(&config).await));
@@ -46,6 +50,7 @@ impl AppState {
         let instance = Arc::new(Self {
             commits: Arc::new(RwLock::new(CommitState::new(client.clone()).await)),
             installations: installations.clone(),
+            #[cfg(feature = "geolocation")]
             locations: locations.clone(),
             servers: servers.clone(),
             events: events.clone(),
@@ -59,6 +64,7 @@ impl AppState {
 
         events.write().await.run(instance.clone()).await;
         servers.write().await.run(instance.clone()).await;
+        #[cfg(feature = "geolocation")]
         locations.write().await.run(instance.clone()).await;
         installations.write().await.run(instance.clone()).await;
 

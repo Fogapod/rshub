@@ -43,6 +43,7 @@ impl Named for ServerView {
 impl HotKeys for ServerView {
     fn hotkeys(&self) -> Vec<HotKey> {
         let mut hotkeys = vec![
+            #[cfg(feature = "geolocation")]
             HotKey {
                 description: "Show world map",
                 key: KeyCode::Char('m'),
@@ -65,6 +66,7 @@ impl HotKeys for ServerView {
 impl InputProcessor for ServerView {
     async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
         match input {
+            #[cfg(feature = "geolocation")]
             UserInput::Char('m' | 'M') => Some(AppAction::OpenView(ViewType::World)),
             UserInput::Enter => {
                 if let Some(i) = self.state.selected() {
@@ -227,12 +229,15 @@ async fn draw_server_info(
     app: &AppState,
     selected: &Server,
 ) {
+    #[cfg(feature = "geolocation")]
     let selected_location =
         if let Some(location) = app.locations.read().await.items.get(&selected.address.ip) {
             format!("{}/{}", location.country, location.city)
         } else {
             "unknown".to_owned()
         };
+    #[cfg(not(feature = "geolocation"))]
+    let selected_location = "unknown".to_owned();
 
     let rows = vec![
         Row::new(vec![

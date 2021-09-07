@@ -11,13 +11,12 @@ license = "MIT"
 
 
 [features]
-default = ["rustls", "geolocation"]
+default = ["rustls"]
 
 rustls = ["reqwest/rustls-tls"]
 
 native-tls = ["reqwest/native-tls"]
 
-# cannot be disablet now
 geolocation = []
 
 [dependencies]
