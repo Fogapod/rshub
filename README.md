@@ -38,8 +38,13 @@ There are multiple issues using RSHub currently:
 - When connecting to server, you will have to enter your password each time. Autologin is broken: https://github.com/unitystation/unitystation/issues/7377
 
 ### Installation
-There are no prebuilt binaries yet, you can run RSHub using cargo:
+There are no prebuilt binaries yet, you can run RSHub from sourcr using cargo:
 `cargo run` or `cargo run --release` (slow)
+
+Install without source:
+`cargo install rshub`
+Optionally with geolocation:
+`cargo install rshub --feature geolocation`
 
 ### Geolocation
 Currently geolocation feature (world map) is opt-in at compile time because of security cencerns.
