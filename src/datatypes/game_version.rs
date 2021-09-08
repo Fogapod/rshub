@@ -130,18 +130,6 @@ impl Ord for GameVersion {
             Ordering::Equal => self.build.cmp(&other.build),
             other => other,
         }
-
-        // implementation without internal u32 hint
-        //
-        // if let Ok(ordering) = self.build.parse::<u32>().and_then(|self_u32| {
-        //     self.build
-        //         .parse::<u32>()
-        //         .map(|other_u32| self_u32.cmp(&other_u32))
-        // }) {
-        //     ordering
-        // } else {
-        //     Ordering::Equal
-        // }
     }
 }
 

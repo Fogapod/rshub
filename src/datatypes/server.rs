@@ -151,4 +151,26 @@ impl Server {
             offline: false,
         }
     }
+
+    pub fn update_from_data(&mut self, data: &ServerData) {
+        let ServerData {
+            name,
+            map,
+            gamemode,
+            time,
+            players,
+            fps,
+            ..
+        } = data;
+
+        if name != &self.name {
+            self.name = name.replace('\n', " ");
+        }
+
+        self.map = map.clone();
+        self.gamemode = gamemode.clone();
+        self.time = time.clone();
+        self.players = *players;
+        self.fps = *fps;
+    }
 }

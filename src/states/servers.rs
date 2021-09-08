@@ -13,15 +13,6 @@ use crate::datatypes::server::{Address, Server, ServerListData};
 use crate::states::app::{AppState, TaskResult};
 use crate::states::installations::InstallationsState;
 
-// use std::collections::hash_map::DefaultHasher;
-// use std::hash::{Hash, Hasher};
-//
-// fn calculate_hash<T: Hash>(t: &T) -> u64 {
-//     let mut s = DefaultHasher::new();
-//     t.hash(&mut s);
-//     s.finish()
-// }
-
 pub struct ServersState {
     pub items: Vec<Server>,
     update_interval: Duration,
@@ -98,12 +89,9 @@ impl ServersState {
                     known_server.version = version;
                 }
 
-                // if calculate_hash(&known_server.data) != calculate_hash(&sv) {
-                //     known_server.updated = true;
-                // }
+                known_server.update_from_data(&sv);
 
                 known_server.offline = false;
-                // known_server.data = sv;
             } else {
                 created_servers.push(Server::new(ip.clone(), version.clone(), sv));
 
@@ -120,6 +108,7 @@ impl ServersState {
 
         self.items.append(&mut created_servers);
 
+        // TODO: pinned servers
         // TODO: custom sorts by each field
         // TODO: search by pattern
         // sorting priorities:
