@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::datatypes::server::ServerData;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub enum DownloadUrl {
     Valid(reqwest::Url),
     Untrusted(reqwest::Url),
@@ -31,6 +31,45 @@ impl DownloadUrl {
     }
 }
 
+impl PartialEq for DownloadUrl {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for DownloadUrl {}
+
+impl PartialOrd for DownloadUrl {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for DownloadUrl {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, &other) {
+            // local installations are the most important
+            (DownloadUrl::Local, DownloadUrl::Local) => Ordering::Equal,
+            (DownloadUrl::Local, _) => Ordering::Greater,
+            // valid downloads
+            (DownloadUrl::Valid(_), DownloadUrl::Valid(_)) => Ordering::Equal,
+            (DownloadUrl::Valid(_), DownloadUrl::Untrusted(_) | DownloadUrl::Invalid(_)) => {
+                Ordering::Greater
+            }
+            (DownloadUrl::Valid(_), DownloadUrl::Local) => Ordering::Less,
+            // untrusted downloads are less relevant
+            (DownloadUrl::Untrusted(_), DownloadUrl::Untrusted(_)) => Ordering::Equal,
+            (DownloadUrl::Untrusted(_), DownloadUrl::Invalid(_)) => Ordering::Greater,
+            (DownloadUrl::Untrusted(_), DownloadUrl::Local | DownloadUrl::Valid(_)) => {
+                Ordering::Less
+            }
+            // invalid downloads are irrelevant
+            (DownloadUrl::Invalid(_), DownloadUrl::Invalid(_)) => Ordering::Equal,
+            (DownloadUrl::Invalid(_), _) => Ordering::Less,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct GameVersion {
     pub fork: String,
@@ -48,9 +87,9 @@ impl From<ServerData> for GameVersion {
         } = data;
 
         Self {
-            fork,
             // replace / for security reasons, just in case
-            build: build.to_string().replace('/', ""),
+            fork: fork.replace('/', ""),
+            build: build.to_string(),
             download: DownloadUrl::new(&download),
         }
     }
@@ -82,43 +121,12 @@ impl PartialOrd for GameVersion {
     }
 }
 
-// FIXME: while it can be useful to involve url in sorting, it creates duplicates
 impl Ord for GameVersion {
     fn cmp(&self, other: &Self) -> Ordering {
-        if self.build == other.build && self.fork == other.fork {
-            return Ordering::Equal;
+        match self.fork.cmp(&other.fork) {
+            Ordering::Equal => self.build.cmp(&other.build),
+            other => other,
         }
-
-        let ordering = match (&self.download, &other.download) {
-            // local installations are the most important
-            (DownloadUrl::Local, DownloadUrl::Local) => Ordering::Equal,
-            (DownloadUrl::Local, _) => Ordering::Greater,
-            // valid downloads
-            (DownloadUrl::Valid(_), DownloadUrl::Valid(_)) => Ordering::Equal,
-            (DownloadUrl::Valid(_), DownloadUrl::Untrusted(_) | DownloadUrl::Invalid(_)) => {
-                Ordering::Greater
-            }
-            (DownloadUrl::Valid(_), DownloadUrl::Local) => Ordering::Less,
-            // // untrusted downloads are less relevant
-            (DownloadUrl::Untrusted(_), DownloadUrl::Untrusted(_)) => Ordering::Equal,
-            (DownloadUrl::Untrusted(_), DownloadUrl::Invalid(_)) => Ordering::Greater,
-            (DownloadUrl::Untrusted(_), DownloadUrl::Local | DownloadUrl::Valid(_)) => {
-                Ordering::Less
-            }
-            // // invalid downloads are irrelevant
-            (DownloadUrl::Invalid(_), DownloadUrl::Invalid(_)) => Ordering::Equal,
-            (DownloadUrl::Invalid(_), _) => Ordering::Less,
-        };
-
-        if let Ordering::Equal = ordering {
-            match self.fork.cmp(&other.fork) {
-                Ordering::Equal => self.build.cmp(&other.build),
-                other => other,
-            }
-        } else {
-            ordering
-        }
-        .reverse()
 
         // implementation without internal u32 hint
         //
@@ -136,6 +144,6 @@ impl Ord for GameVersion {
 
 impl From<GameVersion> for PathBuf {
     fn from(version: GameVersion) -> Self {
-        PathBuf::from(format!("{}/{}", version.fork, version.build))
+        PathBuf::from(version.fork).join(version.build)
     }
 }

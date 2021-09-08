@@ -111,7 +111,7 @@ impl InstallationsState {
                         }
                     ) {
                         log::warn!("not overriding existing version {:?}", existing);
-                        return Ok(());
+                        continue;
                     }
                 }
 

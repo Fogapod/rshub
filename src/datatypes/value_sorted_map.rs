@@ -8,7 +8,7 @@ pub struct ValueSortedMap<K, V> {
     set: BTreeSet<V>,
 }
 
-impl<K: Ord, V: Ord + Clone> ValueSortedMap<K, V> {
+impl<K: Ord, V: Ord + PartialEq<K> + Clone> ValueSortedMap<K, V> {
     pub fn new() -> Self {
         Self {
             map: BTreeMap::new(),
@@ -17,8 +17,19 @@ impl<K: Ord, V: Ord + Clone> ValueSortedMap<K, V> {
     }
 
     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+        // pop entry using key (dumb) cmp
+        let removed = if let Some((removed_key, removed_value)) = self.map.remove_entry(&k) {
+            // remove entry from set using dumb cmp to key
+            self.set.retain(|i| i != &removed_key);
+            Some(removed_value)
+        } else {
+            None
+        };
+
         self.map.insert(k, v.clone());
-        self.set.replace(v)
+        self.set.insert(v);
+
+        removed
     }
 
     pub fn get(&self, k: &K) -> Option<&V> {

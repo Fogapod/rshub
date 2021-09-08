@@ -79,11 +79,17 @@ impl Installation {
 
 impl PartialEq for Installation {
     fn eq(&self, other: &Self) -> bool {
-        self.version.eq(&other.version)
+        self.cmp(other) == Ordering::Equal
     }
 }
 
 impl Eq for Installation {}
+
+impl PartialEq<GameVersion> for Installation {
+    fn eq(&self, version: &GameVersion) -> bool {
+        self.version.eq(version)
+    }
+}
 
 impl PartialOrd for Installation {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -93,6 +99,9 @@ impl PartialOrd for Installation {
 
 impl Ord for Installation {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.version.cmp(&other.version)
+        match self.version.download.cmp(&other.version.download).reverse() {
+            Ordering::Equal => self.version.cmp(&other.version),
+            other => other,
+        }
     }
 }
