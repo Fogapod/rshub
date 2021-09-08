@@ -1135,7 +1135,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rstationhub"
+name = "rshub"
 version = "0.1.0"
 dependencies = [
  "anyhow",

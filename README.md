@@ -1,13 +1,13 @@
-# RStationHub
+# RSHub
 Unofficial game launcher for UnityStation.
 
-RStationHub is a terminal application written in Rust for listing and connecting to UnityStation game servers.
+RSHub is a terminal application written in Rust for listing and connecting to UnityStation game servers.
 UnityStation is a modern remake of Space Station 13 in Unity.
 
 ![Server List](.assets/screenshots/servers.png)
 
 ### Feature comparison to official Hub
-| feature | RStationHub | StationHub |
+| feature | RSHub | StationHub |
 |:---:|:---:|:---:|
 | auth[1] | no | yes |
 | list online servers | yes | yes |
@@ -31,14 +31,14 @@ UnityStation is a modern remake of Space Station 13 in Unity.
 - Mac: it might work, but most likely it would not because of platform limitations. I have no machine to test it.
 
 ### Issues
-There are multiple issues using RStationHub currently:
+There are multiple issues using RSHub currently:
 - Linux, i3 specific: game starts in fullscreen in bad resolution. Solution: uncheck fullscreen mode in game settings.
 - You will get auth error when connecting to server. This is because of a workaround for this bug: https://github.com/unitystation/unitystation/issues/7375
 - When connecting to server, you will have to uncheck `Host Server` checkbox because of this bug: https://github.com/unitystation/unitystation/issues/7376
 - When connecting to server, you will have to enter your password each time. Autologin is broken: https://github.com/unitystation/unitystation/issues/7377
 
 ### Installation
-There are no prebuilt binaries yet, you can run RStationHub using cargo:
+There are no prebuilt binaries yet, you can run RSHub using cargo:
 `cargo run` or `cargo run --release` (slow)
 
 ### Geolocation
