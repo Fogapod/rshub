@@ -194,8 +194,12 @@ impl InstallationsState {
     pub async fn install(app: Arc<AppState>, version: GameVersion) -> TaskResult {
         let url = match &version.download {
             DownloadUrl::Valid(url) => url,
-            DownloadUrl::Untrusted(bad) => {
-                bail!("Not downloading (untrusted URL): `{}`", bad);
+            DownloadUrl::Untrusted(url) => {
+                if !app.config.unchecked_downloads {
+                    bail!("Not downloading (untrusted URL): `{}`", url);
+                }
+
+                url
             }
             DownloadUrl::Invalid(bad) => {
                 bail!("Not downloading (invalid URL): `{}`", bad);
@@ -216,12 +220,12 @@ impl InstallationsState {
             Some(Installation {
                 kind: InstallationKind::Discovered,
                 ..
-            })
-            | None => {}
+            }) => {}
+            Some(_) => {
+                bail!("Attempted to download installed version");
+            }
             _ => {
-                log::warn!("state desync: not discovered, ignoring install request");
-
-                return Ok(());
+                bail!("state desync: not found, ignoring install request");
             }
         }
 

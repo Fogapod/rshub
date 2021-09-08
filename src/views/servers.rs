@@ -50,6 +50,11 @@ impl HotKeys for ServerView {
                 modifiers: None,
             },
             HotKey {
+                description: "Install game version for selected server",
+                key: KeyCode::Char('i'),
+                modifiers: None,
+            },
+            HotKey {
                 description: "Connect to selected server (installs version if needed)",
                 key: KeyCode::Enter,
                 modifiers: None,
@@ -68,6 +73,15 @@ impl InputProcessor for ServerView {
         match input {
             #[cfg(feature = "geolocation")]
             UserInput::Char('m' | 'M') => Some(AppAction::OpenView(ViewType::World)),
+            UserInput::Char('i' | 'I') => {
+                if let Some(i) = self.state.selected() {
+                    Some(AppAction::InstallVersion(
+                        app.servers.read().await.items[i].version.clone(),
+                    ))
+                } else {
+                    None
+                }
+            }
             UserInput::Enter => {
                 if let Some(i) = self.state.selected() {
                     let server = &app.servers.read().await.items[i];

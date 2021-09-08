@@ -21,6 +21,7 @@ pub enum AppAction {
     OpenView(ViewType),
     CloseView,
     // installations
+    InstallVersion(GameVersion),
     AbortVersionInstallation(GameVersion),
     UninstallVersion(GameVersion),
     LaunchVersion(GameVersion),

@@ -8,14 +8,26 @@ use clap::Clap;
 #[cfg(feature = "geolocation")]
 use crate::constants::DEFAULT_GEO_PROVIDER_URL;
 
+// thanks kalmari
+fn greater_than_5(s: &str) -> Result<u64, String> {
+    let min_value = 5;
+
+    if s.parse::<u32>().map_err(|e| e.to_string())? < min_value {
+        return Err(format!("Value must be >= {}", min_value));
+    };
+
+    // dont care
+    Ok(0)
+}
+
 #[derive(Clap, Debug)]
 #[clap(version = clap::crate_version!(), about = "UnityStation server hub")]
 struct CliArgs {
     /// Log file path
     #[clap(short, long)]
     log_file: Option<PathBuf>,
-    /// Server list update interval, in seconds
-    #[clap(short, long, default_value = "20")]
+    /// Server list update interval, in seconds (must be >= 5)
+    #[clap(short, long, default_value = "20", parse(try_from_str = greater_than_5))]
     update_interval: u64,
     /// A level of verbosity, and can be used multiple times
     #[clap(short, long, parse(from_occurrences))]
@@ -27,6 +39,9 @@ struct CliArgs {
     /// Offline mode
     #[clap(long)]
     offline: bool,
+    /// Disable download URL verification
+    #[clap(long)]
+    unchecked_downloads: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -79,12 +94,13 @@ pub struct AppConfig {
     #[cfg(feature = "geolocation")]
     pub geo_provider: reqwest::Url,
     pub offline: bool,
+    pub unchecked_downloads: bool,
 
     pub dirs: AppDirs,
 }
 
 impl AppConfig {
-    pub fn new() -> Result<Self, io::Error> {
+    pub fn new() -> io::Result<Self> {
         let CliArgs {
             log_file,
             update_interval,
@@ -92,6 +108,7 @@ impl AppConfig {
             #[cfg(feature = "geolocation")]
             geo_provider,
             offline,
+            unchecked_downloads,
         } = CliArgs::parse();
 
         Ok(Self {
@@ -102,6 +119,7 @@ impl AppConfig {
             #[cfg(feature = "geolocation")]
             geo_provider,
             offline,
+            unchecked_downloads,
         })
     }
 }

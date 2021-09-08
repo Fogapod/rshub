@@ -83,6 +83,9 @@ impl AppState {
                         Some(address.clone()),
                     )))
                 }
+                AppAction::InstallVersion(version) => Some(tokio::spawn(
+                    InstallationsState::install(Arc::clone(&app), version.clone()),
+                )),
                 AppAction::LaunchVersion(version) => Some(tokio::spawn(
                     InstallationsState::launch(Arc::clone(&app), version.clone(), None),
                 )),

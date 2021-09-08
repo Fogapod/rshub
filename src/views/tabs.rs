@@ -30,7 +30,7 @@ use crate::views::{
 #[derive(Copy, Clone)]
 enum Tab {
     Servers,
-    Installations,
+    Versions,
     Commits,
 }
 
@@ -40,15 +40,15 @@ impl Tab {
             Self::Servers => {
                 format!("servers [{}]", app.servers.read().await.count())
             }
-            Self::Installations => {
-                format!("installations [{}]", app.installations.read().await.count())
+            Self::Versions => {
+                format!("versions [{}]", app.installations.read().await.count())
             }
             Self::Commits => format!("commits [{}]", app.commits.read().await.items.len()),
         }
     }
 
     const fn all() -> [Self; 3] {
-        [Self::Servers {}, Self::Installations {}, Self::Commits {}]
+        [Self::Servers {}, Self::Versions {}, Self::Commits {}]
     }
 
     const fn tab_count() -> usize {
@@ -60,7 +60,7 @@ impl From<Tab> for usize {
     fn from(value: Tab) -> usize {
         match value {
             Tab::Servers => 0,
-            Tab::Installations => 1,
+            Tab::Versions => 1,
             Tab::Commits => 2,
         }
     }
@@ -106,7 +106,7 @@ impl Named for TabView {
             "Tab: {}",
             match self.selected_tab() {
                 Tab::Servers => self.view_servers.name(),
-                Tab::Installations => self.view_installations.name(),
+                Tab::Versions => self.view_installations.name(),
                 Tab::Commits => self.view_commits.name(),
             }
         )
@@ -127,8 +127,8 @@ impl HotKeys for TabView {
                 modifiers: None,
             },
             HotKey {
-                description: "Go Installations tab",
-                key: KeyCode::Char('i'),
+                description: "Go versions tab",
+                key: KeyCode::Char('v'),
                 modifiers: None,
             },
             HotKey {
@@ -140,7 +140,7 @@ impl HotKeys for TabView {
 
         hotkeys.append(&mut match self.selected_tab() {
             Tab::Servers => self.view_servers.hotkeys(),
-            Tab::Installations => self.view_installations.hotkeys(),
+            Tab::Versions => self.view_installations.hotkeys(),
             Tab::Commits => self.view_commits.hotkeys(),
         });
 
@@ -156,8 +156,8 @@ impl InputProcessor for TabView {
                 self.select_tab(Tab::Servers);
                 None
             }
-            UserInput::Char('i' | 'I') => {
-                self.select_tab(Tab::Installations);
+            UserInput::Char('v' | 'V') => {
+                self.select_tab(Tab::Versions);
                 None
             }
             UserInput::Char('c' | 'C') => {
@@ -172,7 +172,7 @@ impl InputProcessor for TabView {
             // even if they implement same trait
             _ => match self.selected_tab() {
                 Tab::Servers => self.view_servers.on_input(input, app).await,
-                Tab::Installations => self.view_installations.on_input(input, app).await,
+                Tab::Versions => self.view_installations.on_input(input, app).await,
                 Tab::Commits => self.view_commits.on_input(input, app).await,
             },
         }
@@ -219,7 +219,7 @@ impl Drawable for TabView {
         // even if they implement same trait
         match self.selected_tab() {
             Tab::Servers => self.view_servers.draw(f, chunks[1], app).await,
-            Tab::Installations => self.view_installations.draw(f, chunks[1], app).await,
+            Tab::Versions => self.view_installations.draw(f, chunks[1], app).await,
             Tab::Commits => self.view_commits.draw(f, chunks[1], app).await,
         };
     }

@@ -17,7 +17,10 @@ impl DownloadUrl {
         match reqwest::Url::parse(url) {
             Ok(parsed) => {
                 // https://github.com/unitystation/stationhub/blob/cebb9d45bff0a1c019852795a471068ba89d770a/UnitystationLauncher/Models/Server.cs#L37-L57
-                if url == "https://evil.exploit" {
+                if parsed.scheme() != "https"
+                    || parsed.host().map(|h| h.to_string())
+                        != Some("unitystationfile.b-cdn.net".to_owned())
+                {
                     Self::Untrusted(parsed)
                 } else {
                     Self::Valid(parsed)

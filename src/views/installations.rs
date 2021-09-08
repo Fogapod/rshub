@@ -1,3 +1,5 @@
+// TODO: rename this to versions.rs
+
 use std::io;
 use std::sync::Arc;
 
@@ -35,7 +37,7 @@ impl InstallationView {
 
 impl Named for InstallationView {
     fn name(&self) -> String {
-        "Installation List".to_owned()
+        "Version List".to_owned()
     }
 }
 
@@ -45,6 +47,11 @@ impl HotKeys for InstallationView {
             HotKey {
                 description: "Refresh installations list",
                 key: KeyCode::F(5),
+                modifiers: None,
+            },
+            HotKey {
+                description: "Install selected version",
+                key: KeyCode::Char('i'),
                 modifiers: None,
             },
             HotKey {
@@ -76,6 +83,15 @@ impl InputProcessor for InstallationView {
                 }
 
                 None
+            }
+            UserInput::Char('i' | 'I') => {
+                if let Some(i) = self.state.selected() {
+                    Some(AppAction::InstallVersion(
+                        app.installations.read().await.items[i].version.clone(),
+                    ))
+                } else {
+                    None
+                }
             }
             UserInput::Char('d' | 'D') => {
                 if let Some(i) = self.state.selected() {
