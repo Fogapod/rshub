@@ -38,6 +38,9 @@ There are multiple issues using RSHub currently:
 - When connecting to server, you will have to enter your password each time. Autologin is broken: https://github.com/unitystation/unitystation/issues/7377
 
 ### Installation
+RSHub requires nightly rust toolchain to build. (because of unstable strip feature).
+If you do not have nightly toolchain, you can prefix cargo commands with `RUSTC_BOOTSTRAP=1 cargo ...` as a workaround.
+
 There are no prebuilt binaries yet, you can run RSHub from sourcr using cargo:
 `cargo run` or `cargo run --release` (slow)
 
