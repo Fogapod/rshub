@@ -12,12 +12,12 @@ use crate::constants::DEFAULT_GEO_PROVIDER_URL;
 fn greater_than_5(s: &str) -> Result<u64, String> {
     let min_value = 5;
 
-    if s.parse::<u32>().map_err(|e| e.to_string())? < min_value {
-        return Err(format!("Value must be >= {}", min_value));
-    };
-
-    // dont care
-    Ok(0)
+    let v = s.parse::<u64>().map_err(|e| e.to_string())?;
+    if v < min_value {
+        Err(format!("Value must be >= {}", min_value))
+    } else {
+        Ok(v)
+    }
 }
 
 #[derive(Clap, Debug)]
