@@ -9,7 +9,7 @@ use crossterm::event::KeyCode;
 
 use tui::{
     backend::CrosstermBackend,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::Span,
     widgets::{Block, Borders, Gauge, Row, Table, TableState},
@@ -17,7 +17,10 @@ use tui::{
 };
 
 use crate::app::AppAction;
-use crate::datatypes::{game_version::DownloadUrl, installation::InstallationKind};
+use crate::datatypes::{
+    game_version::{DownloadUrl, GameVersion},
+    installation::InstallationKind,
+};
 use crate::input::UserInput;
 use crate::states::help::HotKey;
 use crate::states::{AppState, StatelessList};
@@ -64,6 +67,52 @@ impl HotKeys for InstallationView {
         hotkeys.append(&mut self.state.hotkeys());
 
         hotkeys
+    }
+}
+
+enum Progress {
+    Downloading {
+        version: GameVersion,
+        progress: u64,
+        total: Option<u64>,
+    },
+    Unpacking {
+        version: GameVersion,
+    },
+}
+
+impl Progress {
+    fn ratio(&self) -> Option<f64> {
+        match self {
+            Self::Downloading {
+                progress, total, ..
+            } => total.map(|v| *progress as f64 / v as f64),
+            _ => None,
+        }
+    }
+
+    fn label(&self) -> Span {
+        match self {
+            Self::Unpacking { version } => Span::styled(
+                format!("unpacking {}: it is a mystery%", version),
+                Style::default().fg(Color::Black),
+            ),
+            Self::Downloading {
+                version, progress, ..
+            } => {
+                if let Some(ratio) = self.ratio() {
+                    Span::styled(
+                        format!("downloading {}: {:.2}%", version, ratio * 100.0),
+                        Style::default().fg(Color::Black),
+                    )
+                } else {
+                    Span::styled(
+                        format!("downloading {}: {} / ?", version, ByteSize::b(*progress)),
+                        Style::default().fg(Color::Black),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -137,7 +186,7 @@ impl Drawable for InstallationView {
     ) {
         let installations = &app.installations.read().await.items;
 
-        let mut downloading = Vec::new();
+        let mut in_progress = Vec::new();
 
         let items: Vec<Row> = installations
             .iter()
@@ -156,11 +205,20 @@ impl Drawable for InstallationView {
                             )
                         }
                         InstallationKind::Downloading { progress, total } => {
-                            downloading.push((i.version.clone(), *progress as f64, *total as f64));
+                            in_progress.push(Progress::Downloading {
+                                version: i.version.clone(),
+                                progress: *progress,
+                                total: *total,
+                            });
                             "downloading".to_owned()
                         }
                         InstallationKind::Installed { .. } => "installed".to_owned(),
-                        InstallationKind::Unpacking => "unpacking".to_owned(),
+                        InstallationKind::Unpacking => {
+                            in_progress.push(Progress::Unpacking {
+                                version: i.version.clone(),
+                            });
+                            "unpacking".to_owned()
+                        }
                     },
                     match &i.kind {
                         InstallationKind::Installed { size } => size.to_string(),
@@ -175,8 +233,8 @@ impl Drawable for InstallationView {
 
         let mut constraints = vec![Constraint::Min(0)];
 
-        if !downloading.is_empty() {
-            constraints.push(Constraint::Length(2 + downloading.len() as u16));
+        if !in_progress.is_empty() {
+            constraints.push(Constraint::Length(2 + in_progress.len() as u16));
         }
 
         let chunks = Layout::default()
@@ -189,7 +247,7 @@ impl Drawable for InstallationView {
                 Row::new(vec![
                     "VERSION".to_owned(),
                     "STATUS".to_owned(),
-                    "SIZE".to_owned(),
+                    format!("SIZE [{}]", 0),
                 ])
                 .style(
                     Style::default()
@@ -211,11 +269,11 @@ impl Drawable for InstallationView {
 
         f.render_stateful_widget(table, chunks[0], &mut self.state.state);
 
-        if !downloading.is_empty() {
+        if !in_progress.is_empty() {
             let mut progress_bars_constraints = Vec::new();
 
             // + 2 to account for top and bottom borders
-            for _ in 0..downloading.len() + 2 {
+            for _ in 0..in_progress.len() + 2 {
                 progress_bars_constraints.push(Constraint::Length(1));
             }
 
@@ -232,12 +290,9 @@ impl Drawable for InstallationView {
                 .constraints(progress_bars_constraints)
                 .split(chunks[1]);
 
-            for (i, download) in downloading.iter().enumerate() {
-                let ratio = download.1 / download.2;
-                let label = Span::styled(
-                    format!("downloading {}: {:.2}%", download.0, ratio * 100.0),
-                    Style::default().fg(Color::Black),
-                );
+            for (i, progress_item) in in_progress.iter().enumerate() {
+                let label = progress_item.label();
+                let ratio = progress_item.ratio().unwrap_or(1.0);
 
                 let gauge = Gauge::default().ratio(ratio).label(label).gauge_style(
                     Style::default()
@@ -247,7 +302,13 @@ impl Drawable for InstallationView {
                 );
 
                 // + 1 offset for upper border
-                f.render_widget(gauge, chunks[i + 1])
+                f.render_widget(
+                    gauge,
+                    chunks[i + 1].inner(&Margin {
+                        horizontal: 1,
+                        vertical: 0,
+                    }),
+                )
             }
         }
     }

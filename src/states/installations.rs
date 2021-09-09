@@ -238,11 +238,7 @@ impl InstallationsState {
             .await
             .with_context(|| "Initial request failed")?;
 
-        // TODO: handle downloads without known length
-        let total = match response.content_length() {
-            Some(total) => total,
-            None => bail!("Unable to get content length"),
-        };
+        let total = response.content_length();
 
         let mut path = app.config.dirs.installations_dir.clone();
         path.push(PathBuf::from(version.clone()));

@@ -14,7 +14,7 @@ use crate::datatypes::game_version::{DownloadUrl, GameVersion};
 pub enum InstallationKind {
     Discovered,
     Installed { size: ByteSize },
-    Downloading { progress: u64, total: u64 },
+    Downloading { progress: u64, total: Option<u64> },
     Unpacking,
 }
 
