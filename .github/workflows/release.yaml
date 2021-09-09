@@ -22,7 +22,7 @@ jobs:
           - os: macos-latest
             target: x86_64-apple-darwin
           - os: windows-latest
-            target: x86_64-pc-windows-gnu
+            target: x86_64-pc-windows-msvc
 
     runs-on: ${{ matrix.os }}
 
@@ -30,9 +30,6 @@ jobs:
       RUST_BACKTRACE: 1
 
     steps:
-      - name: Create release directory
-        run: mkdir release
-
       - uses: actions/checkout@v2
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -40,12 +37,14 @@ jobs:
           profile: minimal
           toolchain: nightly
           override: true
+          target: ${{ matrix.target }}
 
+      # this is required because of ring (rustls):
+      # https://github.com/briansmith/ring/issues/563
       - name: Prepare musl
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: |
-          sudo apt-get -qq install musl-tools
-          rustup target add x86_64-unknown-linux-musl
+          sudo apt-get -qq install musl-tools --no-install-recommends
 
       - uses: actions/cache@v2
         with:
@@ -55,7 +54,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: cargo-${{ runner.os }}-${{ runner.target }}
+          key: cargo-${{ matrix.os }}-${{ matrix.target }}
 
       - name: Build
         uses: actions-rs/cargo@v1
@@ -66,11 +65,13 @@ jobs:
       - name: Bundle windows
         if: matrix.os == 'windows-latest'
         run: |
-          7z a release/${{ env.PACKAGE_NAME }}-win.zip target/${{ matrix.target }}/release/${{ env.PACKAGE_NAME }}.exe
+          mkdir -p release
+          7z a release/${{ env.PACKAGE_NAME }}-${{ matrix.target }}.zip target/${{ matrix.target }}/release/${{ env.PACKAGE_NAME }}.exe
 
       - name: Bundle non windows
         if: matrix.os != 'windows-latest'
         run: |
+          mkdir -p release
           tar -C target/${{ matrix.target }}/release -czvf release/${{ env.PACKAGE_NAME }}-${{ matrix.target }}.tar.gz ${{ env.PACKAGE_NAME }}
 
       - name: Upload
@@ -79,5 +80,5 @@ jobs:
           # prerelease until 1.0.0
           prerelease: true
           files: |
-            ./release/*.tar.gz
-            ./release/*.zip
+            release/*.tar.gz
+            release/*.zip
