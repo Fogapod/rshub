@@ -14,14 +14,14 @@ use crate::states::help::HelpState;
 use crate::states::help::HotKey;
 #[cfg(feature = "geolocation")]
 use crate::states::LocationsState;
-use crate::states::{CommitState, InstallationsState, ServersState};
+use crate::states::{CommitState, ServersState, VersionsState};
 
 pub type TaskResult = Result<()>;
 
 pub struct AppState {
     pub config: AppConfig,
     pub commits: Arc<RwLock<CommitState>>,
-    pub installations: Arc<RwLock<InstallationsState>>,
+    pub versions: Arc<RwLock<VersionsState>>,
     #[cfg(feature = "geolocation")]
     pub locations: Arc<RwLock<LocationsState>>,
     pub servers: Arc<RwLock<ServersState>>,
@@ -43,13 +43,13 @@ impl AppState {
 
         #[cfg(feature = "geolocation")]
         let locations = Arc::new(RwLock::new(LocationsState::new(&config).await));
-        let installations = Arc::new(RwLock::new(InstallationsState::new(&config).await));
+        let versions = Arc::new(RwLock::new(VersionsState::new(&config).await));
         let servers = Arc::new(RwLock::new(ServersState::new(&config).await));
         let events = Arc::new(RwLock::new(EventsState::new(&config).await));
 
         let instance = Arc::new(Self {
             commits: Arc::new(RwLock::new(CommitState::new(client.clone()).await)),
-            installations: installations.clone(),
+            versions: versions.clone(),
             #[cfg(feature = "geolocation")]
             locations: locations.clone(),
             servers: servers.clone(),
@@ -66,7 +66,7 @@ impl AppState {
         servers.write().await.run(instance.clone()).await;
         #[cfg(feature = "geolocation")]
         locations.write().await.run(instance.clone()).await;
-        installations.write().await.run(instance.clone()).await;
+        versions.write().await.run(instance.clone()).await;
 
         instance
     }
@@ -74,30 +74,29 @@ impl AppState {
     pub async fn on_action(&self, action: &AppAction, app: Arc<AppState>) {
         log::debug!("action: {:?}", &action);
 
-        let f =
-            match action {
-                AppAction::ConnectToServer { version, address } => {
-                    Some(tokio::spawn(InstallationsState::launch(
-                        Arc::clone(&app),
-                        version.clone(),
-                        Some(address.clone()),
-                    )))
-                }
-                AppAction::InstallVersion(version) => Some(tokio::spawn(
-                    InstallationsState::install(Arc::clone(&app), version.clone()),
-                )),
-                AppAction::LaunchVersion(version) => Some(tokio::spawn(
-                    InstallationsState::launch(Arc::clone(&app), version.clone(), None),
-                )),
-                AppAction::AbortVersionInstallation(version) => Some(tokio::spawn(
-                    InstallationsState::abort_installation(Arc::clone(&app), version.clone()),
-                )),
-                AppAction::UninstallVersion(version) => Some(tokio::spawn(
-                    InstallationsState::uninstall(Arc::clone(&app), version.clone()),
-                )),
+        let f = match action {
+            AppAction::ConnectToServer { version, address } => Some(tokio::spawn(
+                VersionsState::launch(Arc::clone(&app), version.clone(), Some(address.clone())),
+            )),
+            AppAction::InstallVersion(version) => Some(tokio::spawn(VersionsState::install(
+                Arc::clone(&app),
+                version.clone(),
+            ))),
+            AppAction::LaunchVersion(version) => Some(tokio::spawn(VersionsState::launch(
+                Arc::clone(&app),
+                version.clone(),
+                None,
+            ))),
+            AppAction::AbortVersionInstallation(version) => Some(tokio::spawn(
+                VersionsState::abort_installation(Arc::clone(&app), version.clone()),
+            )),
+            AppAction::UninstallVersion(version) => Some(tokio::spawn(VersionsState::uninstall(
+                Arc::clone(&app),
+                version.clone(),
+            ))),
 
-                _ => None,
-            };
+            _ => None,
+        };
 
         if let Some(f) = f {
             self.watch_task(f).await;

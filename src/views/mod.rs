@@ -1,9 +1,9 @@
 pub mod commits;
 pub mod events;
 pub mod help;
-pub mod installations;
 pub mod servers;
 pub mod tabs;
+pub mod versions;
 #[cfg(feature = "geolocation")]
 pub mod world;
 

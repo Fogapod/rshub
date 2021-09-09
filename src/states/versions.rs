@@ -20,12 +20,12 @@ use crate::datatypes::{
 };
 use crate::states::app::{AppState, TaskResult};
 
-pub struct InstallationsState {
+pub struct VersionsState {
     pub items: ValueSortedMap<GameVersion, Installation>,
     pub install_dir_error: Option<String>,
 }
 
-impl InstallationsState {
+impl VersionsState {
     pub async fn new(_: &AppConfig) -> Self {
         Self {
             items: ValueSortedMap::new(),
@@ -44,14 +44,14 @@ impl InstallationsState {
     pub async fn spawn_installation_finder(&mut self, app: Arc<AppState>) {
         app.watch_task(tokio::task::spawn(Self::fs_installation_finder_task(
             app.config.clone(),
-            app.installations.clone(),
+            app.versions.clone(),
         )))
         .await;
     }
 
     async fn fs_installation_finder_task(
         app: AppConfig,
-        installations: Arc<RwLock<Self>>,
+        versions: Arc<RwLock<Self>>,
     ) -> TaskResult {
         log::debug!(
             "installation directory: {}",
@@ -62,7 +62,7 @@ impl InstallationsState {
             .await
             .with_context(|| "Unable to read installation directory")?;
 
-        let mut installations = installations.write().await;
+        let mut versions = versions.write().await;
 
         while let Some(fork_dirs) = dirs
             .next_entry()
@@ -99,7 +99,7 @@ impl InstallationsState {
 
                 log::info!("found installation: {:?}", &installation);
 
-                if let Some(existing) = installations.items.get(&installation.version.clone()) {
+                if let Some(existing) = versions.items.get(&installation.version.clone()) {
                     if matches!(
                         existing,
                         Installation {
@@ -113,7 +113,7 @@ impl InstallationsState {
                     }
                 }
 
-                installations
+                versions
                     .items
                     .insert(installation.version.clone(), installation);
             }
@@ -162,7 +162,7 @@ impl InstallationsState {
     pub async fn version_discovered(app: Arc<AppState>, version: &GameVersion) -> TaskResult {
         log::debug!("discovered: {}", version);
 
-        let mut installations = app.installations.write().await;
+        let mut installations = app.versions.write().await;
 
         if let Some(existing) = installations.items.get(version).cloned() {
             if !matches!(&existing.kind, InstallationKind::Discovered) {
@@ -214,7 +214,7 @@ impl InstallationsState {
             .event(&format!("Downloading {}", version))
             .await;
 
-        match app.installations.read().await.items.get(&version) {
+        match app.versions.read().await.items.get(&version) {
             Some(Installation {
                 kind: InstallationKind::Discovered,
                 ..
@@ -227,7 +227,7 @@ impl InstallationsState {
             }
         }
 
-        let installations = app.installations.clone();
+        let versions = app.versions.clone();
 
         let response = app
             .client
@@ -259,7 +259,7 @@ impl InstallationsState {
 
         let mut progress = 0;
 
-        installations.write().await.items.insert(
+        versions.write().await.items.insert(
             version.clone(),
             Installation {
                 version: version.clone(),
@@ -281,8 +281,8 @@ impl InstallationsState {
 
             progress += chunk.len();
 
-            let mut installations = installations.write().await;
-            let previous = installations.items.insert(
+            let mut versions = versions.write().await;
+            let previous = versions.items.insert(
                 version.clone(),
                 Installation {
                     version: version.clone(),
@@ -302,7 +302,7 @@ impl InstallationsState {
             ) {
                 log::info!("aborting installation because installation state changed");
 
-                previous.and_then(|previous| installations.items.insert(version.clone(), previous));
+                previous.and_then(|previous| versions.items.insert(version.clone(), previous));
 
                 if let Err(err) = fs::remove_dir_all(&build_home).await {
                     log::error!(
@@ -316,7 +316,7 @@ impl InstallationsState {
             }
         }
 
-        installations.write().await.items.insert(
+        versions.write().await.items.insert(
             version.clone(),
             Installation {
                 version: version.clone(),
@@ -356,7 +356,7 @@ impl InstallationsState {
             );
         }
 
-        installations.write().await.items.insert(
+        versions.write().await.items.insert(
             version.clone(),
             Installation {
                 version: version.clone(),
@@ -378,7 +378,7 @@ impl InstallationsState {
     }
 
     pub async fn abort_installation(app: Arc<AppState>, version: GameVersion) -> TaskResult {
-        let mut installations = app.installations.write().await;
+        let mut installations = app.versions.write().await;
 
         if matches!(
             installations.items.get(&version),
@@ -413,9 +413,9 @@ impl InstallationsState {
         path.push(PathBuf::from(version.clone()));
 
         // lock in advance
-        let mut installations = app.installations.write().await;
+        let mut versions = app.versions.write().await;
 
-        match installations.items.get(&version) {
+        match versions.items.get(&version) {
             Some(Installation {
                 kind: InstallationKind::Installed { .. },
                 ..
@@ -429,9 +429,9 @@ impl InstallationsState {
             .await
             .with_context(|| "Unable to remove build directory")?;
 
-        installations.items.remove(&version);
+        versions.items.remove(&version);
 
-        installations.refresh(app.clone()).await;
+        versions.refresh(app.clone()).await;
 
         app.events
             .read()
@@ -454,7 +454,7 @@ impl InstallationsState {
             .await;
 
         if !matches!(
-            app.installations
+            app.versions
                 .read()
                 .await
                 .items

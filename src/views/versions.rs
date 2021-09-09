@@ -1,5 +1,3 @@
-// TODO: rename this to versions.rs
-
 use std::io;
 use std::sync::Arc;
 
@@ -26,11 +24,11 @@ use crate::states::help::HotKey;
 use crate::states::{AppState, StatelessList};
 use crate::views::{Drawable, HotKeys, InputProcessor, Named};
 
-pub struct InstallationView {
+pub struct VersionView {
     state: StatelessList<TableState>,
 }
 
-impl InstallationView {
+impl VersionView {
     pub fn new() -> Self {
         Self {
             state: StatelessList::new(TableState::default(), false),
@@ -38,13 +36,13 @@ impl InstallationView {
     }
 }
 
-impl Named for InstallationView {
+impl Named for VersionView {
     fn name(&self) -> String {
         "Version List".to_owned()
     }
 }
 
-impl HotKeys for InstallationView {
+impl HotKeys for VersionView {
     fn hotkeys(&self) -> Vec<HotKey> {
         let mut hotkeys = vec![
             HotKey {
@@ -117,16 +115,16 @@ impl Progress {
 }
 
 #[async_trait::async_trait]
-impl InputProcessor for InstallationView {
+impl InputProcessor for VersionView {
     async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
         match input {
             UserInput::Refresh => {
-                let mut installations = app.installations.write().await;
+                let mut versions = app.versions.write().await;
 
-                installations.refresh(app.clone()).await;
+                versions.refresh(app.clone()).await;
 
                 if let Some(i) = self.state.selected() {
-                    if i >= installations.count() {
+                    if i >= versions.count() {
                         self.state.unselect();
                     }
                 }
@@ -136,7 +134,7 @@ impl InputProcessor for InstallationView {
             UserInput::Char('i' | 'I') => {
                 if let Some(i) = self.state.selected() {
                     Some(AppAction::InstallVersion(
-                        app.installations.read().await.items[i].version.clone(),
+                        app.versions.read().await.items[i].version.clone(),
                     ))
                 } else {
                     None
@@ -145,7 +143,7 @@ impl InputProcessor for InstallationView {
             UserInput::Char('d' | 'D') => {
                 if let Some(i) = self.state.selected() {
                     Some(AppAction::UninstallVersion(
-                        app.installations.read().await.items[i].version.clone(),
+                        app.versions.read().await.items[i].version.clone(),
                     ))
                 } else {
                     None
@@ -154,7 +152,7 @@ impl InputProcessor for InstallationView {
             UserInput::Char('a' | 'A') => {
                 if let Some(i) = self.state.selected() {
                     Some(AppAction::AbortVersionInstallation(
-                        app.installations.read().await.items[i].version.clone(),
+                        app.versions.read().await.items[i].version.clone(),
                     ))
                 } else {
                     None
@@ -163,7 +161,7 @@ impl InputProcessor for InstallationView {
             UserInput::Enter => {
                 if let Some(i) = self.state.selected() {
                     Some(AppAction::LaunchVersion(
-                        app.installations.read().await.items[i].version.clone(),
+                        app.versions.read().await.items[i].version.clone(),
                     ))
                 } else {
                     None
@@ -171,25 +169,25 @@ impl InputProcessor for InstallationView {
             }
             _ => self
                 .state
-                .on_input(input, app.installations.read().await.count()),
+                .on_input(input, app.versions.read().await.count()),
         }
     }
 }
 
 #[async_trait::async_trait]
-impl Drawable for InstallationView {
+impl Drawable for VersionView {
     async fn draw(
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
         area: Rect,
         app: &AppState,
     ) {
-        let installations = &app.installations.read().await.items;
+        let versions = &app.versions.read().await.items;
 
         let mut total_size = 0;
         let mut in_progress = Vec::new();
 
-        let items: Vec<Row> = installations
+        let items: Vec<Row> = versions
             .iter()
             .map(|i| {
                 Row::new(vec![

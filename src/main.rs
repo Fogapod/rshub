@@ -2,7 +2,6 @@ mod app;
 mod config;
 mod constants;
 mod datatypes;
-mod errors;
 mod input;
 mod states;
 mod views;

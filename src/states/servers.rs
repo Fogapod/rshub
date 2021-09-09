@@ -11,7 +11,7 @@ use crate::datatypes::game_version::{DownloadUrl, GameVersion};
 use crate::datatypes::geolocation::IP;
 use crate::datatypes::server::{Address, Server, ServerListData};
 use crate::states::app::{AppState, TaskResult};
-use crate::states::installations::InstallationsState;
+use crate::states::versions::VersionsState;
 
 pub struct ServersState {
     pub items: Vec<Server>,
@@ -54,7 +54,7 @@ impl ServersState {
             #[cfg(feature = "geolocation")]
             let _ = app.locations.write().await.resolve(ip);
 
-            let _ = InstallationsState::version_discovered(Arc::clone(&app), &version).await;
+            let _ = VersionsState::version_discovered(Arc::clone(&app), &version).await;
         }
 
         if app.config.offline {
@@ -85,7 +85,7 @@ impl ServersState {
             if let Some(known_server) = previously_online.remove(&ip) {
                 // version changed (download/build/fork)
                 if known_server.version != version {
-                    InstallationsState::version_discovered(Arc::clone(&app), &version).await?;
+                    VersionsState::version_discovered(Arc::clone(&app), &version).await?;
                     known_server.version = version;
                 }
 
@@ -95,7 +95,7 @@ impl ServersState {
             } else {
                 created_servers.push(Server::new(ip.clone(), version.clone(), sv));
 
-                InstallationsState::version_discovered(Arc::clone(&app), &version).await?;
+                VersionsState::version_discovered(Arc::clone(&app), &version).await?;
 
                 #[cfg(feature = "geolocation")]
                 app.locations.write().await.resolve(ip).await?;

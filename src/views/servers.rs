@@ -55,7 +55,7 @@ impl HotKeys for ServerView {
                 modifiers: None,
             },
             HotKey {
-                description: "Connect to selected server (installs version if needed)",
+                description: "Connect to selected server (install if needed)",
                 key: KeyCode::Enter,
                 modifiers: None,
             },
