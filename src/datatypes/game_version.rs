@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::path::PathBuf;
 
+use crate::constants::DEFAULT_CDN_DOMAIN;
 use crate::datatypes::server::ServerData;
 
 #[derive(Debug, Clone)]
@@ -18,8 +19,7 @@ impl DownloadUrl {
             Ok(parsed) => {
                 // https://github.com/unitystation/stationhub/blob/cebb9d45bff0a1c019852795a471068ba89d770a/UnitystationLauncher/Models/Server.cs#L37-L57
                 if parsed.scheme() != "https"
-                    || parsed.host().map(|h| h.to_string())
-                        != Some("unitystationfile.b-cdn.net".to_owned())
+                    || parsed.host().map(|h| h.to_string()) != Some(DEFAULT_CDN_DOMAIN.to_owned())
                 {
                     Self::Untrusted(parsed)
                 } else {
