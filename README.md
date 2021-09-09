@@ -24,7 +24,7 @@ UnityStation is a modern remake of Space Station 13 in Unity.
 
 ### Platform support
 - Linux: developed and tested on.
-- Windows: might work out of the box, but I have no Windows machine to test it.
+- Windows: seem to work, though I do not have machine to test it.
 - Mac: it might work, but most likely it would not because of platform limitations. I have no machine to test it.
 
 ### Installation
