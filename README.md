@@ -28,10 +28,10 @@ UnityStation is a modern remake of Space Station 13 in Unity.
 - Mac: it might work, but most likely it would not because of platform limitations. I have no machine to test it.
 
 ### Installation
+Prebuilt binaries can be found in [releases](https://github.com/Fogapod/rshub/releases).
+
 RSHub requires nightly rust toolchain to build (unstable strip feature).
 If you do not have nightly toolchain, you can prefix cargo commands with `RUSTC_BOOTSTRAP=1 cargo ...` as a workaround.
-
-There are no prebuilt binaries yet.
 
 Install from crates.io (stable version): `cargo install rshub`  
 Or with [geolocation](#geolocation) feature: `cargo install rshub --feature geolocation`
