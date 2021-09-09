@@ -162,9 +162,9 @@ impl VersionsState {
     pub async fn version_discovered(app: Arc<AppState>, version: &GameVersion) -> TaskResult {
         log::debug!("discovered: {}", version);
 
-        let mut installations = app.versions.write().await;
+        let mut versions = app.versions.write().await;
 
-        if let Some(existing) = installations.items.get(version).cloned() {
+        if let Some(existing) = versions.items.get(version).cloned() {
             if !matches!(&existing.kind, InstallationKind::Discovered) {
                 log::debug!("not replacing existing {:?} with discovered", existing);
 
@@ -178,7 +178,7 @@ impl VersionsState {
             .event(&format!("Discovered {}", version))
             .await;
 
-        installations.items.insert(
+        versions.items.insert(
             version.clone(),
             Installation {
                 version: version.clone(),
@@ -378,16 +378,16 @@ impl VersionsState {
     }
 
     pub async fn abort_installation(app: Arc<AppState>, version: GameVersion) -> TaskResult {
-        let mut installations = app.versions.write().await;
+        let mut versions = app.versions.write().await;
 
         if matches!(
-            installations.items.get(&version),
+            versions.items.get(&version),
             Some(Installation {
                 kind: InstallationKind::Downloading { .. } | InstallationKind::Unpacking,
                 ..
             })
         ) {
-            installations.items.insert(
+            versions.items.insert(
                 version.clone(),
                 Installation {
                     version: version.clone(),

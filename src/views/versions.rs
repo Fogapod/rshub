@@ -46,7 +46,7 @@ impl HotKeys for VersionView {
     fn hotkeys(&self) -> Vec<HotKey> {
         let mut hotkeys = vec![
             HotKey {
-                description: "Refresh installations list",
+                description: "Refresh version list",
                 key: KeyCode::F(5),
                 modifiers: None,
             },
