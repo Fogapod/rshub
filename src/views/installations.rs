@@ -173,16 +173,15 @@ impl Drawable for InstallationView {
             })
             .collect();
 
+        let mut constraints = vec![Constraint::Min(0)];
+
+        if !downloading.is_empty() {
+            constraints.push(Constraint::Length(2 + downloading.len() as u16));
+        }
+
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(0),
-                Constraint::Length(if !downloading.is_empty() {
-                    2 + downloading.len() as u16
-                } else {
-                    0
-                }),
-            ])
+            .constraints(constraints.clone())
             .split(area);
 
         let table = Table::new(items)
@@ -213,30 +212,42 @@ impl Drawable for InstallationView {
         f.render_stateful_widget(table, chunks[0], &mut self.state.state);
 
         if !downloading.is_empty() {
-            for download in downloading {
+            let mut progress_bars_constraints = Vec::new();
+
+            // + 2 to account for top and bottom borders
+            for _ in 0..downloading.len() + 2 {
+                progress_bars_constraints.push(Constraint::Length(1));
+            }
+
+            f.render_widget(
+                Block::default()
+                    .title("PROGRESS")
+                    .title_alignment(Alignment::Center)
+                    .borders(Borders::ALL),
+                chunks[1],
+            );
+
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(progress_bars_constraints)
+                .split(chunks[1]);
+
+            for (i, download) in downloading.iter().enumerate() {
                 let ratio = download.1 / download.2;
                 let label = Span::styled(
                     format!("downloading {}: {:.2}%", download.0, ratio * 100.0),
                     Style::default().fg(Color::Black),
                 );
 
-                let gauge = Gauge::default()
-                    .block(
-                        Block::default()
-                            .title("PROGRESS")
-                            .title_alignment(Alignment::Center)
-                            .borders(Borders::ALL),
-                    )
-                    .ratio(ratio)
-                    .label(label)
-                    .gauge_style(
-                        Style::default()
-                            .fg(Color::Green)
-                            .bg(Color::Red)
-                            .add_modifier(Modifier::BOLD),
-                    );
+                let gauge = Gauge::default().ratio(ratio).label(label).gauge_style(
+                    Style::default()
+                        .fg(Color::Green)
+                        .bg(Color::Red)
+                        .add_modifier(Modifier::BOLD),
+                );
 
-                f.render_widget(gauge, chunks[1])
+                // + 1 offset for upper border
+                f.render_widget(gauge, chunks[i + 1])
             }
         }
     }
