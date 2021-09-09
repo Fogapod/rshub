@@ -44,7 +44,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: cargo-${{ runner.os }}-${{ runner.target }}-{{ hashFiles('**/Cargo.lock') }}
+          key: cargo-${{ runner.os }}-${{ runner.target }}
 
       - name: Build musl
         if: matrix.os == 'ubuntu-latest'
