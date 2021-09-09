@@ -3,6 +3,7 @@ cargo-features = ["strip"]
 [package]
 name = "rshub"
 version = "0.1.2"
+authors = ["Fogapod <fogaprod@gmail.com>"]
 edition = "2018"
 description = "Unofficial game launcher for UnityStation"
 homepage = "https://github.com/Fogapod/rshub"

@@ -1,0 +1,80 @@
+# Based on https://github.com/ClementTsang/bottom/blob/d6c69ea319ecf1b27100423124713e328343bfef/.github/workflows/deployment.yml
+#   and on https://github.com/extrawurst/gitui/blob/23e52b7c87a19592ec179bf20d920eea0d08fa1c/.github/workflows/cd.yml
+
+name: Release binaries
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+env:
+  PACKAGE_NAME: "rshub"
+
+jobs:
+  publish:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - os: macos-latest
+          - os: windows-latest
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      RUST_BACKTRACE: 1
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-${{ runner.os }}-${{ runner.target }}-{{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build musl
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get -qq install musl-tools
+          rustup target add x86_64-unknown-linux-musl
+          cargo build --release --target=${{ matrix.target }}
+          mkdir -p release
+          tar -C ./target/${{ matrix.target }}/release/ -czvf ./release/${{ env.PACKAGE_NAME }}-linux-musl.tar.gz ./${{ env.PACKAGE_NAME }}
+
+      - name: Build windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          cargo build --release
+          mkdir -p release
+          tar -C ./target/release/ -czvf ./release/${{ env.PACKAGE_NAME }}-win.tar.gz ./${{ env.PACKAGE_NAME }}.exe
+
+      - name: Build mac
+        if: matrix.os == 'macos-latest'
+        run: |
+          cargo build --release
+          mkdir -p release
+          tar -C ./target/release/ -czvf ./release/${{ env.PACKAGE_NAME }}-mac.tar.gz ./${{ env.PACKAGE_NAME }}
+
+      - name: Upload
+        uses: softprops/action-gh-release@v1
+        with:
+          # prerelease until 1.0.0
+          prerelease: true
+          files: |
+            ./release/*.tar.gz
+            ./release/*.zip
+            ./release/*.exe
