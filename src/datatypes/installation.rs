@@ -2,8 +2,6 @@ use std::cmp::Ordering;
 use std::io;
 use std::path::Path;
 
-use bytesize::ByteSize;
-
 use anyhow::{Context, Result};
 
 use tokio::fs;
@@ -13,7 +11,7 @@ use crate::datatypes::game_version::{DownloadUrl, GameVersion};
 #[derive(Debug, Clone)]
 pub enum InstallationKind {
     Discovered,
-    Installed { size: ByteSize },
+    Installed { size: u64 },
     Downloading { progress: u64, total: Option<u64> },
     Unpacking,
 }
@@ -48,7 +46,7 @@ impl Installation {
                 download: DownloadUrl::Local,
             },
             kind: InstallationKind::Installed {
-                size: ByteSize::b(Self::get_folder_size(dir).await.unwrap_or_default()),
+                size: Self::get_folder_size(dir).await.unwrap_or_default(),
             },
         });
     }

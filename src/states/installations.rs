@@ -2,8 +2,6 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 
-use bytesize::ByteSize;
-
 use anyhow::{anyhow, bail, Context};
 
 use futures::stream::StreamExt;
@@ -240,18 +238,20 @@ impl InstallationsState {
 
         let total = response.content_length();
 
-        let mut path = app.config.dirs.installations_dir.clone();
-        path.push(PathBuf::from(version.clone()));
+        let build_home = app
+            .config
+            .dirs
+            .installations_dir
+            .join(PathBuf::from(version.clone()));
 
-        let path_parent = path.clone();
+        let archive_file = build_home.join("data.zip");
 
-        path.push("data.zip");
-
-        fs::create_dir_all(&path_parent)
+        fs::create_dir_all(&build_home)
             .await
             .with_context(|| "Unable to create installation folder")?;
 
-        let mut file = fs::File::create(path.clone())
+        log::warn!("{}", archive_file.display());
+        let mut file = fs::File::create(archive_file.clone())
             .await
             .with_context(|| "Unable to create archive file")?;
 
@@ -304,10 +304,10 @@ impl InstallationsState {
 
                 previous.and_then(|previous| installations.items.insert(version.clone(), previous));
 
-                if let Err(err) = fs::remove_dir_all(&path_parent).await {
+                if let Err(err) = fs::remove_dir_all(&build_home).await {
                     log::error!(
                         "Unable to cleanup download directory {}: {}",
-                        path_parent.display(),
+                        build_home.display(),
                         err
                     );
                 }
@@ -326,8 +326,8 @@ impl InstallationsState {
 
         drop(file);
 
-        let path_cloned = path.clone();
-        let path_parent_cloned = path_parent.clone();
+        let path_cloned = archive_file.clone();
+        let path_parent_cloned = build_home.clone();
 
         app.events
             .read()
@@ -348,8 +348,12 @@ impl InstallationsState {
         .with_context(|| "Task joining failed")?
         .with_context(|| "Archive decompression failed")?;
 
-        if let Err(err) = fs::remove_file(&path).await {
-            log::error!("Unable to cleanup zip file {}: {}", path.display(), err);
+        if let Err(err) = fs::remove_file(&archive_file).await {
+            log::error!(
+                "Unable to cleanup zip file {}: {}",
+                archive_file.display(),
+                err
+            );
         }
 
         installations.write().await.items.insert(
@@ -357,11 +361,9 @@ impl InstallationsState {
             Installation {
                 version: version.clone(),
                 kind: InstallationKind::Installed {
-                    size: ByteSize::b(
-                        Installation::get_folder_size(&path_parent)
-                            .await
-                            .unwrap_or_default(),
-                    ),
+                    size: Installation::get_folder_size(&build_home)
+                        .await
+                        .unwrap_or_default(),
                 },
             },
         );
@@ -466,40 +468,43 @@ impl InstallationsState {
             Self::install(app.clone(), version.clone())
                 .await
                 .with_context(|| "Unable to install")?;
-        } else {
-            // https://github.com/unitystation/stationhub/blob/cebb9d45bff0a1c019852795a471068ba89d770a/UnitystationLauncher/Models/Installation.cs#L33-L104
-            let mut path = app.config.dirs.installations_dir.clone();
-            path.push(PathBuf::from(version.clone()));
-
-            let mut exec_path = path.clone();
-
-            #[cfg(target_family = "unix")]
-            exec_path.push("Unitystation");
-            #[cfg(target_os = "windows")]
-            exec_path.push("Unitystation.exe");
-
-            let mut command = Command::new(&exec_path);
-            command.current_dir(&path);
-
-            if let Some(address) = address {
-                command
-                    .arg("--server")
-                    .arg(address.ip.to_string())
-                    .arg("--port")
-                    .arg(address.port.to_string())
-                    // these are required for custom port and server because of bug
-                    .arg("--refreshtoken")
-                    .arg("gibberish")
-                    .arg("--uid")
-                    .arg("gibberish");
-            }
-            command
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()
-                .with_context(|| "Unable to launch installation")?;
         }
+
+        // https://github.com/unitystation/stationhub/blob/cebb9d45bff0a1c019852795a471068ba89d770a/UnitystationLauncher/Models/Installation.cs#L33-L104
+        let path = app
+            .config
+            .dirs
+            .installations_dir
+            .join(PathBuf::from(version.clone()));
+
+        #[cfg(target_family = "unix")]
+        let exec_path = path.join("Unitystation");
+        #[cfg(target_os = "windows")]
+        let exec_path = path.join("Unitystation.exe");
+        #[cfg(not(any(target_family = "unix", target_os = "windows")))]
+        bail!("Unsupported OS");
+
+        let mut command = Command::new(&exec_path);
+        command.current_dir(&path);
+
+        if let Some(address) = address {
+            command
+                .arg("--server")
+                .arg(address.ip.to_string())
+                .arg("--port")
+                .arg(address.port.to_string())
+                // these are required for custom port and server because of bug
+                .arg("--refreshtoken")
+                .arg("gibberish")
+                .arg("--uid")
+                .arg("gibberish");
+        }
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .with_context(|| "Unable to launch installation")?;
 
         Ok(())
     }

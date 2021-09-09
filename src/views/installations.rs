@@ -186,6 +186,7 @@ impl Drawable for InstallationView {
     ) {
         let installations = &app.installations.read().await.items;
 
+        let mut total_size = 0;
         let mut in_progress = Vec::new();
 
         let items: Vec<Row> = installations
@@ -205,6 +206,8 @@ impl Drawable for InstallationView {
                             )
                         }
                         InstallationKind::Downloading { progress, total } => {
+                            total_size += progress;
+
                             in_progress.push(Progress::Downloading {
                                 version: i.version.clone(),
                                 progress: *progress,
@@ -212,7 +215,11 @@ impl Drawable for InstallationView {
                             });
                             "downloading".to_owned()
                         }
-                        InstallationKind::Installed { .. } => "installed".to_owned(),
+                        InstallationKind::Installed { size, .. } => {
+                            total_size += size;
+
+                            "installed".to_owned()
+                        }
                         InstallationKind::Unpacking => {
                             in_progress.push(Progress::Unpacking {
                                 version: i.version.clone(),
@@ -221,7 +228,7 @@ impl Drawable for InstallationView {
                         }
                     },
                     match &i.kind {
-                        InstallationKind::Installed { size } => size.to_string(),
+                        InstallationKind::Installed { size } => ByteSize::b(*size).to_string(),
                         InstallationKind::Downloading { progress, .. } => {
                             ByteSize::b(*progress).to_string()
                         }
@@ -247,7 +254,7 @@ impl Drawable for InstallationView {
                 Row::new(vec![
                     "VERSION".to_owned(),
                     "STATUS".to_owned(),
-                    format!("SIZE [{}]", 0),
+                    format!("SIZE [{}]", ByteSize::b(total_size)),
                 ])
                 .style(
                     Style::default()
