@@ -2,12 +2,15 @@ cargo-features = ["strip"]
 
 [package]
 name = "rshub"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2018"
 description = "Unofficial game launcher for UnityStation"
 homepage = "https://github.com/Fogapod/rshub"
 repository = "https://github.com/Fogapod/rshub"
 license = "MIT"
+keywords = ["ss13", "unitystation", "ui", "cli", "terminal"]
+categories = ["command-line-utilities", "games"]
+exclude = [".github/*", ".assets/*"]
 
 
 [features]

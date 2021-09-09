@@ -18,17 +18,30 @@ UnityStation is a modern remake of Space Station 13 in Unity.
 | news/commits section | yes | yes |
 | show servers on map (useless) | yes | no |
 | written in rust | yes | no |
+| ian icon | no | [broken](https://github.com/unitystation/stationhub/issues/111) |
 
-[1]: even though launching game without auth has major inconveniences, (refer to #Issues), I am not planning to support firebase (unitystation is switching to their own provider)
-
-### Usage
-- Use `--help` to get CLI usage.
-- Press F1 on any screen to show hotkeys.
+[1] Even though launching game without auth has major inconveniences, described in [issues](#issues), I am not planning to support firebase (unitystation is switching to their own provider).
 
 ### Platform support
 - Linux: developed and tested on.
 - Windows: might work out of the box, but I have no Windows machine to test it.
 - Mac: it might work, but most likely it would not because of platform limitations. I have no machine to test it.
+
+### Installation
+RSHub requires nightly rust toolchain to build (unstable strip feature).
+If you do not have nightly toolchain, you can prefix cargo commands with `RUSTC_BOOTSTRAP=1 cargo ...` as a workaround.
+
+There are no prebuilt binaries yet.
+
+Install from crates.io (stable version): `cargo install rshub`  
+Or with [geolocation](#geolocation) feature: `cargo install rshub --feature geolocation`
+
+Run from source (latest version):
+`cargo run` or `cargo run --release` (slow)
+
+### Usage
+- Use `--help` to get CLI usage.
+- Press F1 on any screen to show hotkeys.
 
 ### Issues
 There are multiple issues using RSHub currently:
@@ -37,21 +50,11 @@ There are multiple issues using RSHub currently:
 - When connecting to server, you will have to uncheck `Host Server` checkbox because of this bug: https://github.com/unitystation/unitystation/issues/7376
 - When connecting to server, you will have to enter your password each time. Autologin is broken: https://github.com/unitystation/unitystation/issues/7377
 
-### Installation
-RSHub requires nightly rust toolchain to build. (because of unstable strip feature).
-If you do not have nightly toolchain, you can prefix cargo commands with `RUSTC_BOOTSTRAP=1 cargo ...` as a workaround.
-
-There are no prebuilt binaries yet, you can run RSHub from sourcr using cargo:
-`cargo run` or `cargo run --release` (slow)
-
-Install without source:
-`cargo install rshub`
-Optionally with geolocation:
-`cargo install rshub --feature geolocation`
-
 ### Geolocation
 Currently geolocation feature (world map) is opt-in at compile time because of security cencerns.
-You will have to run `cargo install --path . --features geolocation` to enable it.
+You will have to add `--features geolocation` to cargo commands to enable it.
+This is because service I use for geolocation has too high ratelimits and I had to set up my own instance.  
+While solves ratelimits problem, it lets me gather IP addresses (and locations) of hub users, so I made it strictly opt-in.
 
 ### Special thanks (random order)
 - PotatoAlienOf13: for testing and suggestions during initial development and original [idea](https://github.com/PotatoAlienOf13/not-station-hub)
