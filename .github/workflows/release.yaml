@@ -20,7 +20,9 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
           - os: macos-latest
+            target: x86_64-apple-darwin
           - os: windows-latest
+            target: x86_64-pc-windows-gnu
 
     runs-on: ${{ matrix.os }}
 
@@ -28,6 +30,9 @@ jobs:
       RUST_BACKTRACE: 1
 
     steps:
+      - name: Create release directory
+        run: mkdir release
+
       - uses: actions/checkout@v2
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -35,6 +40,12 @@ jobs:
           profile: minimal
           toolchain: nightly
           override: true
+
+      - name: Prepare musl
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get -qq install musl-tools
+          rustup target add x86_64-unknown-linux-musl
 
       - uses: actions/cache@v2
         with:
@@ -46,28 +57,21 @@ jobs:
             target/
           key: cargo-${{ runner.os }}-${{ runner.target }}
 
-      - name: Build musl
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get -qq install musl-tools
-          rustup target add x86_64-unknown-linux-musl
-          cargo build --release --target=${{ matrix.target }}
-          mkdir -p release
-          tar -C target/${{ matrix.target }}/release -czvf release/${{ env.PACKAGE_NAME }}-linux-musl.tar.gz ${{ env.PACKAGE_NAME }}
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target=${{ matrix.target }}
 
-      - name: Build windows
+      - name: Bundle windows
         if: matrix.os == 'windows-latest'
         run: |
-          cargo build --release
-          mkdir -p release
-          7z a release/${{ env.PACKAGE_NAME }}-win.zip target/release/${{ env.PACKAGE_NAME }}.exe
+          7z a release/${{ env.PACKAGE_NAME }}-win.zip target/${{ matrix.target }}/release/${{ env.PACKAGE_NAME }}.exe
 
-      - name: Build mac
-        if: matrix.os == 'macos-latest'
+      - name: Bundle non windows
+        if: matrix.os != 'windows-latest'
         run: |
-          cargo build --release
-          mkdir -p release
-          tar -C target/release -czvf release/${{ env.PACKAGE_NAME }}-mac.tar.gz ${{ env.PACKAGE_NAME }}
+          tar -C target/${{ matrix.target }}/release -czvf release/${{ env.PACKAGE_NAME }}-${{ matrix.target }}.tar.gz ${{ env.PACKAGE_NAME }}
 
       - name: Upload
         uses: softprops/action-gh-release@v1
@@ -77,4 +81,3 @@ jobs:
           files: |
             ./release/*.tar.gz
             ./release/*.zip
-            ./release/*.exe
