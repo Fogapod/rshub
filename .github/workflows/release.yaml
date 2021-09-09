@@ -53,21 +53,21 @@ jobs:
           rustup target add x86_64-unknown-linux-musl
           cargo build --release --target=${{ matrix.target }}
           mkdir -p release
-          tar -C ./target/${{ matrix.target }}/release/ -czvf ./release/${{ env.PACKAGE_NAME }}-linux-musl.tar.gz ./${{ env.PACKAGE_NAME }}
+          tar -C target/${{ matrix.target }}/release -czvf release/${{ env.PACKAGE_NAME }}-linux-musl.tar.gz ${{ env.PACKAGE_NAME }}
 
       - name: Build windows
         if: matrix.os == 'windows-latest'
         run: |
           cargo build --release
           mkdir -p release
-          tar -C ./target/release/ -czvf ./release/${{ env.PACKAGE_NAME }}-win.tar.gz ./${{ env.PACKAGE_NAME }}.exe
+          7z a release/${{ env.PACKAGE_NAME }}-win.zip target/release/${{ env.PACKAGE_NAME }}.exe
 
       - name: Build mac
         if: matrix.os == 'macos-latest'
         run: |
           cargo build --release
           mkdir -p release
-          tar -C ./target/release/ -czvf ./release/${{ env.PACKAGE_NAME }}-mac.tar.gz ./${{ env.PACKAGE_NAME }}
+          tar -C target/release -czvf release/${{ env.PACKAGE_NAME }}-mac.tar.gz ${{ env.PACKAGE_NAME }}
 
       - name: Upload
         uses: softprops/action-gh-release@v1
