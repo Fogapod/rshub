@@ -35,6 +35,7 @@ pub struct Location {
     pub city: String,
 }
 
+#[cfg(feature = "geolocation")]
 impl TryFrom<&LocationJson> for Location {
     type Error = &'static str;
 
