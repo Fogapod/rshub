@@ -12,12 +12,12 @@ use tui::{
 
 use crate::states::app::AppState;
 use crate::states::events::AppEvent;
-use crate::views::Drawable;
+use crate::views::Draw;
 
 pub struct EventsView {}
 
 #[async_trait::async_trait]
-impl Drawable for EventsView {
+impl Draw for EventsView {
     async fn draw(
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,

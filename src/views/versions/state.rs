@@ -20,16 +20,14 @@ use crate::datatypes::{
 };
 use crate::states::app::{AppState, TaskResult};
 
-pub struct VersionsState {
+pub struct State {
     pub items: ValueSortedMap<GameVersion, Installation>,
-    pub install_dir_error: Option<String>,
 }
 
-impl VersionsState {
-    pub async fn new(_: &AppConfig) -> Self {
+impl State {
+    pub fn new() -> Self {
         Self {
             items: ValueSortedMap::new(),
-            install_dir_error: None,
         }
     }
 

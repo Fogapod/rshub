@@ -1,26 +1,20 @@
 pub mod app;
-pub mod commits;
 pub mod events;
 pub mod help;
 #[cfg(feature = "geolocation")]
 pub mod locations;
-pub mod servers;
-pub mod versions;
 
 pub use app::AppState;
-pub use commits::CommitState;
 #[cfg(feature = "geolocation")]
 pub use locations::LocationsState;
-pub use servers::ServersState;
-pub use versions::VersionsState;
 
 use crossterm::event::KeyCode;
 
 use tui::widgets::{ListState, TableState};
 
 use crate::app::AppAction;
+use crate::datatypes::hotkey::HotKey;
 use crate::input::UserInput;
-use crate::states::help::HotKey;
 
 // tui states look same, but do not implement trait, so I made one
 pub trait TuiState {

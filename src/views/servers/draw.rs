@@ -1,113 +1,34 @@
 use std::io;
 use std::sync::Arc;
 
-use crossterm::event::KeyCode;
-
 use tui::backend::CrosstermBackend;
 use tui::layout::Rect;
 use tui::terminal::Frame;
-
-use crate::app::AppAction;
-use crate::datatypes::server::Server;
-use crate::input::UserInput;
-use crate::states::help::HotKey;
-use crate::states::{AppState, StatelessList};
-use crate::views::{Drawable, HotKeys, InputProcessor, Named, ViewType};
 
 use tui::{
     layout::{Alignment, Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     symbols::DOT,
     text::{Span, Spans, Text},
-    widgets::{Block, Borders, Paragraph, Row, Table, TableState, Wrap},
+    widgets::{Block, Borders, Paragraph, Row, Table, Wrap},
 };
 
-pub struct ServerView {
-    state: StatelessList<TableState>,
-}
+use crate::datatypes::server::Server;
 
-impl ServerView {
-    pub fn new() -> Self {
-        Self {
-            state: StatelessList::new(TableState::default(), false),
-        }
-    }
-}
+use crate::states::AppState;
+use crate::views::Draw;
 
-impl Named for ServerView {
-    fn name(&self) -> String {
-        "Server List".to_owned()
-    }
-}
-
-impl HotKeys for ServerView {
-    fn hotkeys(&self) -> Vec<HotKey> {
-        let mut hotkeys = vec![
-            #[cfg(feature = "geolocation")]
-            HotKey {
-                description: "Show world map",
-                key: KeyCode::Char('m'),
-                modifiers: None,
-            },
-            HotKey {
-                description: "Install game version for selected server",
-                key: KeyCode::Char('i'),
-                modifiers: None,
-            },
-            HotKey {
-                description: "Connect to selected server (install if needed)",
-                key: KeyCode::Enter,
-                modifiers: None,
-            },
-        ];
-
-        hotkeys.append(&mut self.state.hotkeys());
-
-        hotkeys
-    }
-}
+use super::Servers;
 
 #[async_trait::async_trait]
-impl InputProcessor for ServerView {
-    async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
-        match input {
-            #[cfg(feature = "geolocation")]
-            UserInput::Char('m' | 'M') => Some(AppAction::OpenView(ViewType::World)),
-            UserInput::Char('i' | 'I') => {
-                if let Some(i) = self.state.selected() {
-                    Some(AppAction::InstallVersion(
-                        app.servers.read().await.items[i].version.clone(),
-                    ))
-                } else {
-                    None
-                }
-            }
-            UserInput::Enter => {
-                if let Some(i) = self.state.selected() {
-                    let server = &app.servers.read().await.items[i];
-
-                    Some(AppAction::ConnectToServer {
-                        version: server.version.clone(),
-                        address: server.address.clone(),
-                    })
-                } else {
-                    None
-                }
-            }
-            _ => self.state.on_input(input, app.servers.read().await.count()),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl Drawable for ServerView {
+impl Draw for Servers {
     async fn draw(
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
         area: Rect,
         app: Arc<AppState>,
     ) {
-        let servers = &app.servers.read().await.items;
+        let servers = self.state.read().await.items;
 
         let mut count_online = 0;
         let mut count_no_players = 0;
@@ -227,13 +148,13 @@ impl Drawable for ServerView {
             );
 
         // draw server info
-        if let Some(selected) = self.state.selected().map(|s| &servers[s]) {
+        if let Some(selected) = self.selection.selected().map(|s| &servers[s]) {
             draw_server_info(f, chunks[1], Arc::clone(&app), selected).await;
         } else {
             draw_info(f, chunks[1], Arc::clone(&app));
         }
 
-        f.render_stateful_widget(table, chunks[0], &mut self.state.state);
+        f.render_stateful_widget(table, chunks[0], &mut self.selection.state);
     }
 }
 

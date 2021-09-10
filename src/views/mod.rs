@@ -15,8 +15,8 @@ use tui::layout::Rect;
 use tui::terminal::Frame;
 
 use crate::app::AppAction;
+use crate::datatypes::hotkey::HotKey;
 use crate::input::UserInput;
-use crate::states::help::HotKey;
 use crate::states::AppState;
 
 #[derive(PartialEq, Eq, Hash, Debug)]
@@ -28,7 +28,7 @@ pub enum ViewType {
 }
 
 #[async_trait::async_trait]
-pub trait Drawable {
+pub trait Draw {
     async fn draw(
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
@@ -38,7 +38,7 @@ pub trait Drawable {
 }
 
 #[async_trait::async_trait]
-pub trait InputProcessor {
+pub trait Input {
     async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction>;
 }
 
@@ -48,8 +48,8 @@ pub trait HotKeys {
     }
 }
 
-pub trait Named {
+pub trait Name {
     fn name(&self) -> String;
 }
 
-pub trait AppView: Drawable + InputProcessor + HotKeys + Named {}
+pub trait AppView: Draw + Input + HotKeys + Name {}

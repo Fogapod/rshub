@@ -13,7 +13,7 @@ use crate::input::UserInput;
 use crate::states::app::AppState;
 #[cfg(feature = "geolocation")]
 use crate::views::world::World;
-use crate::views::{events::EventsView, help::Help, tabs::TabView, AppView, Drawable, ViewType};
+use crate::views::{events::EventsView, help::Help, tabs::Tabs, AppView, Draw, ViewType};
 
 #[derive(Debug)]
 pub enum AppAction {
@@ -60,7 +60,7 @@ impl App {
             panicked: panic_bool,
         };
 
-        instance.register_view(ViewType::Tab, Box::new(TabView::new()));
+        instance.register_view(ViewType::Tab, Box::new(Tabs::new()));
         #[cfg(feature = "geolocation")]
         instance.register_view(ViewType::World, Box::new(World {}));
         instance.register_view(ViewType::Help, Box::new(Help {}));

@@ -14,17 +14,17 @@ use tui::{
 };
 
 use crate::app::AppAction;
+use crate::datatypes::hotkey::HotKey;
 use crate::input::UserInput;
-use crate::states::help::HotKey;
 use crate::states::AppState;
-use crate::views::{AppView, Drawable, HotKeys, InputProcessor, Named};
+use crate::views::{AppView, Draw, HotKeys, Input, Name};
 
 pub struct Help {}
 
 impl AppView for Help {}
 
 #[async_trait::async_trait]
-impl Named for Help {
+impl Name for Help {
     fn name(&self) -> String {
         "Help Screen".to_owned()
     }
@@ -42,7 +42,7 @@ impl HotKeys for Help {
 }
 
 #[async_trait::async_trait]
-impl InputProcessor for Help {
+impl Input for Help {
     async fn on_input(&mut self, input: &UserInput, _: Arc<AppState>) -> Option<AppAction> {
         match input {
             UserInput::Back => Some(AppAction::CloseView),
@@ -52,7 +52,7 @@ impl InputProcessor for Help {
 }
 
 #[async_trait::async_trait]
-impl Drawable for Help {
+impl Draw for Help {
     async fn draw(
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,

@@ -1,32 +1,40 @@
+mod draw;
+mod hotkeys;
+mod input;
+mod state;
+mod tasks;
+
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
 
-use anyhow::Context;
+use tokio::sync::RwLock;
+use tui::widgets::TableState;
 
-use crate::config::AppConfig;
-use crate::constants::SERVER_LIST_URL;
 use crate::datatypes::game_version::{DownloadUrl, GameVersion};
 use crate::datatypes::geolocation::IP;
 use crate::datatypes::server::{Address, Server, ServerListJson};
-use crate::states::app::{AppState, TaskResult};
-use crate::states::versions::VersionsState;
+use crate::states::{AppState, StatelessList};
+use crate::views::Name;
 
-pub struct ServersState {
-    pub items: Vec<Server>,
-    update_interval: Duration,
+use state::State;
+
+use crate::views::AppView;
+
+pub struct Servers {
+    state: Arc<RwLock<State>>,
+    selection: StatelessList<TableState>,
 }
 
-impl ServersState {
-    pub async fn new(config: &AppConfig) -> Self {
+impl Servers {
+    pub fn new() -> Self {
         Self {
-            items: Vec::new(),
-            update_interval: Duration::from_secs(config.update_interval),
+            state: Arc::new(RwLock::new(State::new())),
+            selection: StatelessList::new(TableState::default(), false),
         }
     }
 
-    pub async fn run(&mut self, app: Arc<AppState>) {
+    pub async fn run(&self, app: Arc<AppState>) {
         #[cfg(debug_assertions)]
         {
             let ip = IP::Remote("8.8.8.8".to_owned());
@@ -36,7 +44,7 @@ impl ServersState {
                 download: DownloadUrl::new("http://evil.exploit"),
             };
 
-            self.items.push(Server {
+            self.state.write().await.items.push(Server {
                 name: "TEST SERVER PLEASE IGNORE".to_owned(),
                 address: Address {
                     ip: ip.clone(),
@@ -54,27 +62,26 @@ impl ServersState {
             #[cfg(feature = "geolocation")]
             app.locations.write().await.resolve(&ip).await;
 
-            let _ = VersionsState::version_discovered(Arc::clone(&app), &version).await;
+            // let _ = VersionsState::version_discovered(Arc::clone(&app), &version).await;
         }
 
         if app.config.offline {
             return;
         }
 
-        app.watch_task(tokio::task::spawn(Self::server_fetch_task(app.clone())))
+        app.watch_task(tokio::task::spawn(tasks::server_fetch_task(app.clone())))
             .await;
     }
 
-    pub fn count(&self) -> usize {
-        self.items.len()
+    pub async fn count(&self) -> usize {
+        self.state.read().await.items.len()
     }
 
-    pub async fn update(&mut self, app: Arc<AppState>, data: ServerListJson) {
-        let mut previously_online: HashMap<Address, &mut Server> = self
-            .items
-            .iter_mut()
-            .map(|i| (i.address.clone(), i))
-            .collect();
+    pub async fn update(&self, app: Arc<AppState>, data: ServerListJson) {
+        let mut items = self.state.write().await.items;
+
+        let mut previously_online: HashMap<Address, &mut Server> =
+            items.iter_mut().map(|i| (i.address.clone(), i)).collect();
 
         let mut created_servers: Vec<Server> = Vec::new();
 
@@ -87,7 +94,7 @@ impl ServersState {
             let version = GameVersion::from(sv.clone());
 
             if let Some(known_server) = previously_online.remove(&address) {
-                // version changed (download/build/fork)
+                // download/build/fork changed
                 if known_server.version != version {
                     VersionsState::version_discovered(Arc::clone(&app), &version).await;
                     known_server.version = version;
@@ -110,7 +117,7 @@ impl ServersState {
             sv.offline = true;
         }
 
-        self.items.append(&mut created_servers);
+        items.append(&mut created_servers);
 
         // TODO: pinned servers
         // TODO: custom sorts by each field
@@ -120,7 +127,7 @@ impl ServersState {
         //  - player count
         //  - server name
         // https://stackoverflow.com/a/40369685
-        self.items.sort_by(|a, b| match a.offline.cmp(&b.offline) {
+        items.sort_by(|a, b| match a.offline.cmp(&b.offline) {
             Ordering::Equal => match a.players.cmp(&b.players).reverse() {
                 Ordering::Equal => a.name.cmp(&b.name),
                 other => other,
@@ -128,36 +135,18 @@ impl ServersState {
             other => other,
         });
     }
+}
 
-    async fn server_fetch_task(app: Arc<AppState>) -> TaskResult {
-        let update_interval = app.servers.read().await.update_interval;
+impl Default for Servers {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
-        #[cfg(feature = "geolocation")]
-        app.locations.write().await.resolve(&IP::Local).await;
+impl AppView for Servers {}
 
-        async fn loop_body(app: Arc<AppState>) -> anyhow::Result<()> {
-            let data = app
-                .client
-                .get(SERVER_LIST_URL)
-                .send()
-                .await
-                .with_context(|| "sending server list request")?
-                .error_for_status()?
-                .json::<ServerListJson>()
-                .await
-                .with_context(|| "parsing server list response")?;
-
-            app.servers.write().await.update(app.clone(), data).await;
-
-            Ok(())
-        }
-
-        loop {
-            if let Err(err) = loop_body(Arc::clone(&app)).await {
-                app.events.read().await.error(err).await;
-            }
-
-            tokio::time::sleep(update_interval).await;
-        }
+impl Name for Servers {
+    fn name(&self) -> String {
+        "Server List".to_owned()
     }
 }

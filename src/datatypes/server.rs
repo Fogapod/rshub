@@ -120,8 +120,6 @@ pub struct Server {
     pub gamemode: String,
     pub time: String,
     pub fps: u32,
-    // ui update skip optimization
-    // pub updated: bool,
     pub offline: bool,
 }
 
@@ -145,8 +143,7 @@ impl Server {
             players,
             fps,
             version,
-            address: address.clone(),
-            // updated: true,
+            address,
             offline: false,
         }
     }
