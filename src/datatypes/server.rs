@@ -24,7 +24,7 @@ where
 
 #[derive(Debug, Clone, Deserialize, Hash)]
 #[serde(default)]
-pub struct ServerData {
+pub struct ServerJson {
     #[serde(rename = "ServerName")]
     #[serde(deserialize_with = "deserialize_ok_or_default")]
     pub name: String,
@@ -72,7 +72,7 @@ pub struct ServerData {
     pub download: String,
 }
 
-impl Default for ServerData {
+impl Default for ServerJson {
     fn default() -> Self {
         let unknown_str = "unknown".to_owned();
         let unknown_u32 = 0;
@@ -94,11 +94,11 @@ impl Default for ServerData {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ServerListData {
-    pub servers: Vec<ServerData>,
+pub struct ServerListJson {
+    pub servers: Vec<ServerJson>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Address {
     pub ip: IP,
     pub port: u32,
@@ -126,14 +126,13 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(ip: IP, version: GameVersion, data: ServerData) -> Self {
-        let ServerData {
+    pub fn new(address: Address, version: GameVersion, data: ServerJson) -> Self {
+        let ServerJson {
             name,
             map,
             gamemode,
             time,
             players,
-            port,
             fps,
             ..
         } = data;
@@ -146,14 +145,14 @@ impl Server {
             players,
             fps,
             version,
-            address: Address { ip, port },
+            address: address.clone(),
             // updated: true,
             offline: false,
         }
     }
 
-    pub fn update_from_data(&mut self, data: &ServerData) {
-        let ServerData {
+    pub fn update_from_json(&mut self, data: &ServerJson) {
+        let ServerJson {
             name,
             map,
             gamemode,

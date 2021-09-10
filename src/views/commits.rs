@@ -60,7 +60,7 @@ impl Drawable for CommitView {
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
         area: Rect,
-        app: &AppState,
+        app: Arc<AppState>,
     ) {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -120,7 +120,7 @@ impl Drawable for CommitView {
 
         if !self.loaded {
             if !app.config.offline {
-                app.watch_task(tokio::spawn(CommitState::load(app.commits.clone())))
+                app.watch_task(tokio::spawn(CommitState::load(Arc::clone(&app))))
                     .await;
             }
 

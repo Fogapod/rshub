@@ -66,7 +66,7 @@ impl Drawable for World {
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
         area: Rect,
-        app: &AppState,
+        app: Arc<AppState>,
     ) {
         let locations = &app.locations.read().await.items;
         let servers = &app.servers.read().await.items;
@@ -107,10 +107,12 @@ impl Drawable for World {
                 // separate loop to draw on top of lines
                 for sv in servers {
                     if let Some(location) = locations.get(&sv.address.ip) {
-                        let color = if sv.players != 0 {
-                            Color::Green
-                        } else {
+                        let color = if sv.offline {
+                            Color::Gray
+                        } else if sv.players == 0 {
                             Color::Red
+                        } else {
+                            Color::Green
                         };
                         ctx.print(location.longitude, location.latitude, "O", color);
                     }

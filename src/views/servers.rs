@@ -105,7 +105,7 @@ impl Drawable for ServerView {
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
         area: Rect,
-        app: &AppState,
+        app: Arc<AppState>,
     ) {
         let servers = &app.servers.read().await.items;
 
@@ -228,9 +228,9 @@ impl Drawable for ServerView {
 
         // draw server info
         if let Some(selected) = self.state.selected().map(|s| &servers[s]) {
-            draw_server_info(f, chunks[1], app, selected).await;
+            draw_server_info(f, chunks[1], Arc::clone(&app), selected).await;
         } else {
-            draw_info(f, chunks[1], app);
+            draw_info(f, chunks[1], Arc::clone(&app));
         }
 
         f.render_stateful_widget(table, chunks[0], &mut self.state.state);
@@ -240,7 +240,7 @@ impl Drawable for ServerView {
 async fn draw_server_info(
     f: &mut Frame<'_, CrosstermBackend<io::Stdout>>,
     area: Rect,
-    app: &AppState,
+    app: Arc<AppState>,
     selected: &Server,
 ) {
     #[cfg(feature = "geolocation")]
@@ -313,7 +313,7 @@ async fn draw_server_info(
     f.render_widget(table, area);
 }
 
-fn draw_info(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: &AppState) {
+fn draw_info(f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(vec![Constraint::Percentage(100)])

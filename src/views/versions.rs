@@ -180,7 +180,7 @@ impl Drawable for VersionView {
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
         area: Rect,
-        app: &AppState,
+        app: Arc<AppState>,
     ) {
         let versions = &app.versions.read().await.items;
 

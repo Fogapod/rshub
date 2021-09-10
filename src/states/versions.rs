@@ -159,7 +159,7 @@ impl VersionsState {
             .await;
     }
 
-    pub async fn version_discovered(app: Arc<AppState>, version: &GameVersion) -> TaskResult {
+    pub async fn version_discovered(app: Arc<AppState>, version: &GameVersion) {
         log::debug!("discovered: {}", version);
 
         let mut versions = app.versions.write().await;
@@ -168,7 +168,7 @@ impl VersionsState {
             if !matches!(&existing.kind, InstallationKind::Discovered) {
                 log::debug!("not replacing existing {:?} with discovered", existing);
 
-                return Ok(());
+                return;
             }
         }
 
@@ -185,8 +185,6 @@ impl VersionsState {
                 kind: InstallationKind::Discovered,
             },
         );
-
-        Ok(())
     }
 
     pub async fn install(app: Arc<AppState>, version: GameVersion) -> TaskResult {

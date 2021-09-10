@@ -35,7 +35,7 @@ enum Tab {
 }
 
 impl Tab {
-    async fn name(&self, app: &AppState) -> String {
+    async fn name(&self, app: Arc<AppState>) -> String {
         match self {
             Self::Servers => {
                 format!("servers [{}]", app.servers.read().await.count())
@@ -185,7 +185,7 @@ impl Drawable for TabView {
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
         area: Rect,
-        app: &AppState,
+        app: Arc<AppState>,
     ) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -198,7 +198,10 @@ impl Drawable for TabView {
             .split(chunks[0]);
 
         let tabs = stream::iter(Tab::all())
-            .then(|t| async move { Spans::from(t.name(app).await) })
+            .then(|t| {
+                let cloned_app = Arc::clone(&app);
+                async move { Spans::from(t.name(cloned_app).await) }
+            })
             .collect()
             .await;
 

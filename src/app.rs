@@ -83,14 +83,16 @@ impl App {
                         .direction(Direction::Vertical)
                         .split(f.size());
 
-                    self.events_view.draw(f, chunks[1], &self.state).await;
+                    self.events_view
+                        .draw(f, chunks[1], Arc::clone(&self.state))
+                        .await;
 
                     chunks[0]
                 } else {
                     f.size()
                 };
 
-                widget.draw(f, area, &self.state).await;
+                widget.draw(f, area, Arc::clone(&self.state)).await;
             }
         }
     }

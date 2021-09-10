@@ -33,7 +33,7 @@ pub trait Drawable {
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
         area: Rect,
-        app: &AppState,
+        app: Arc<AppState>,
     );
 }
 

@@ -3,13 +3,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::Context;
 
 use crate::config::AppConfig;
 use crate::constants::SERVER_LIST_URL;
 use crate::datatypes::game_version::{DownloadUrl, GameVersion};
 use crate::datatypes::geolocation::IP;
-use crate::datatypes::server::{Address, Server, ServerListData};
+use crate::datatypes::server::{Address, Server, ServerListJson};
 use crate::states::app::{AppState, TaskResult};
 use crate::states::versions::VersionsState;
 
@@ -33,7 +33,7 @@ impl ServersState {
             let version = GameVersion {
                 fork: "evil-exploit".to_owned(),
                 build: 666.to_string(),
-                download: DownloadUrl::new("https://evil.exploit"),
+                download: DownloadUrl::new("http://evil.exploit"),
             };
 
             self.items.push(Server {
@@ -52,7 +52,7 @@ impl ServersState {
             });
 
             #[cfg(feature = "geolocation")]
-            let _ = app.locations.write().await.resolve(ip);
+            app.locations.write().await.resolve(&ip).await;
 
             let _ = VersionsState::version_discovered(Arc::clone(&app), &version).await;
         }
@@ -69,36 +69,40 @@ impl ServersState {
         self.items.len()
     }
 
-    pub async fn update(&mut self, app: Arc<AppState>, data: ServerListData) -> Result<()> {
-        let mut previously_online: HashMap<IP, &mut Server> = self
+    pub async fn update(&mut self, app: Arc<AppState>, data: ServerListJson) {
+        let mut previously_online: HashMap<Address, &mut Server> = self
             .items
             .iter_mut()
-            .map(|i| (i.address.ip.clone(), i))
+            .map(|i| (i.address.clone(), i))
             .collect();
 
         let mut created_servers: Vec<Server> = Vec::new();
 
         for sv in data.servers {
             let ip = IP::Remote(sv.ip.clone());
+            let address = Address {
+                ip: ip.clone(),
+                port: sv.port,
+            };
             let version = GameVersion::from(sv.clone());
 
-            if let Some(known_server) = previously_online.remove(&ip) {
+            if let Some(known_server) = previously_online.remove(&address) {
                 // version changed (download/build/fork)
                 if known_server.version != version {
-                    VersionsState::version_discovered(Arc::clone(&app), &version).await?;
+                    VersionsState::version_discovered(Arc::clone(&app), &version).await;
                     known_server.version = version;
                 }
 
-                known_server.update_from_data(&sv);
+                known_server.update_from_json(&sv);
 
                 known_server.offline = false;
             } else {
-                created_servers.push(Server::new(ip.clone(), version.clone(), sv));
-
-                VersionsState::version_discovered(Arc::clone(&app), &version).await?;
-
                 #[cfg(feature = "geolocation")]
-                app.locations.write().await.resolve(ip).await?;
+                app.locations.write().await.resolve(&ip).await;
+
+                created_servers.push(Server::new(address, version.clone(), sv));
+
+                VersionsState::version_discovered(Arc::clone(&app), &version).await;
             }
         }
 
@@ -123,43 +127,27 @@ impl ServersState {
             },
             other => other,
         });
-
-        Ok(())
     }
 
     async fn server_fetch_task(app: Arc<AppState>) -> TaskResult {
         let update_interval = app.servers.read().await.update_interval;
 
         #[cfg(feature = "geolocation")]
-        if let Err(err) = app.locations.write().await.resolve(IP::Local).await {
-            app.events
-                .read()
-                .await
-                .error(anyhow!("Unable to fetch local ip: {}", err))
-                .await;
-        }
+        app.locations.write().await.resolve(&IP::Local).await;
 
         async fn loop_body(app: Arc<AppState>) -> anyhow::Result<()> {
-            let req = app
+            let data = app
                 .client
                 .get(SERVER_LIST_URL)
                 .send()
                 .await
-                .with_context(|| "Unable to create server list request")?
-                .error_for_status()
-                .with_context(|| "Bad server list response")?;
+                .with_context(|| "sending server list request")?
+                .error_for_status()?
+                .json::<ServerListJson>()
+                .await
+                .with_context(|| "parsing server list response")?;
 
-            let resp = req
-                .json::<ServerListData>()
-                .await
-                .with_context(|| "Unable to decode server list request")?;
-
-            app.servers
-                .write()
-                .await
-                .update(app.clone(), resp)
-                .await
-                .with_context(|| "Unable to update server list")?;
+            app.servers.write().await.update(app.clone(), data).await;
 
             Ok(())
         }

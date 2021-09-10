@@ -1,27 +1,27 @@
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct CommitAuthor {
+pub struct CommitAuthorJson {
     pub name: String,
     pub date: String,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct CommitData {
-    pub author: CommitAuthor,
+pub struct CommitJson {
+    pub author: CommitAuthorJson,
     pub message: String,
     // pub added: usize,
     // pub removed: usize,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct GitHubJunkCommit {
+pub struct GitHubJunkCommitJson {
     pub sha: String,
-    pub commit: CommitData,
+    pub commit: CommitJson,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct CommitRange(pub Vec<GitHubJunkCommit>);
+pub struct CommitsJson(pub Vec<GitHubJunkCommitJson>);
 
 #[derive(Debug)]
 pub struct Commit {
@@ -31,11 +31,11 @@ pub struct Commit {
     pub date: String,
     // pub added: usize,
     // pub removed: usize,
-    pub author: CommitAuthor,
+    pub author: CommitAuthorJson,
 }
 
-impl From<&GitHubJunkCommit> for Commit {
-    fn from(commit: &GitHubJunkCommit) -> Self {
+impl From<&GitHubJunkCommitJson> for Commit {
+    fn from(commit: &GitHubJunkCommitJson) -> Self {
         Self {
             sha: commit.sha.to_owned(),
             date: commit.commit.author.date.clone(),

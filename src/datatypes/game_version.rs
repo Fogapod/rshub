@@ -3,7 +3,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 use crate::constants::DEFAULT_CDN_DOMAIN;
-use crate::datatypes::server::ServerData;
+use crate::datatypes::server::ServerJson;
 
 #[derive(Debug, Clone)]
 pub enum DownloadUrl {
@@ -80,9 +80,9 @@ pub struct GameVersion {
     pub download: DownloadUrl,
 }
 
-impl From<ServerData> for GameVersion {
-    fn from(data: ServerData) -> Self {
-        let ServerData {
+impl From<ServerJson> for GameVersion {
+    fn from(data: ServerJson) -> Self {
+        let ServerJson {
             fork,
             build,
             download,

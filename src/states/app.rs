@@ -36,11 +36,6 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(config: AppConfig, panic_bool: Arc<AtomicBool>) -> Arc<Self> {
-        let client = reqwest::Client::builder()
-            .user_agent(USER_AGENT)
-            .build()
-            .expect("creating client");
-
         #[cfg(feature = "geolocation")]
         let locations = Arc::new(RwLock::new(LocationsState::new(&config).await));
         let versions = Arc::new(RwLock::new(VersionsState::new(&config).await));
@@ -48,14 +43,17 @@ impl AppState {
         let events = Arc::new(RwLock::new(EventsState::new(&config).await));
 
         let instance = Arc::new(Self {
-            commits: Arc::new(RwLock::new(CommitState::new(client.clone()).await)),
+            commits: Arc::new(RwLock::new(CommitState::new().await)),
             versions: versions.clone(),
             #[cfg(feature = "geolocation")]
             locations: locations.clone(),
             servers: servers.clone(),
             events: events.clone(),
             config,
-            client,
+            client: reqwest::Client::builder()
+                .user_agent(USER_AGENT)
+                .build()
+                .expect("creating client"),
 
             help: Mutex::new(HelpState::new()),
 

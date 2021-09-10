@@ -57,7 +57,7 @@ impl Drawable for Help {
         &mut self,
         f: &mut Frame<CrosstermBackend<io::Stdout>>,
         area: Rect,
-        app: &AppState,
+        app: Arc<AppState>,
     ) {
         let help = app.help.lock().unwrap();
 
