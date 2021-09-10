@@ -58,27 +58,27 @@ impl AppDirs {
 
         Ok(Self {
             log_file: log_file.unwrap_or_else(|| Self::default_log_path(&data_dir)),
-            installations_dir: Self::get_installations_dir(data_dir.clone())?,
+            installations_dir: Self::get_installations_dir(&data_dir)?,
             data_dir,
         })
     }
 
     fn get_data_dir() -> Result<PathBuf, io::Error> {
-        let mut data = dirs_next::data_dir().expect("unable to get data directory");
-
-        data.push(env!("CARGO_PKG_NAME"));
-
-        fs::create_dir_all(&data)?;
-
-        Ok(data)
-    }
-
-    fn get_installations_dir(mut data_dir: PathBuf) -> Result<PathBuf, io::Error> {
-        data_dir.push("installations");
+        let data_dir = dirs_next::data_dir()
+            .expect("unable to get data directory")
+            .join(env!("CARGO_PKG_NAME"));
 
         fs::create_dir_all(&data_dir)?;
 
         Ok(data_dir)
+    }
+
+    fn get_installations_dir(data_dir: &Path) -> Result<PathBuf, io::Error> {
+        let installations_dir = data_dir.join("installations");
+
+        fs::create_dir_all(&installations_dir)?;
+
+        Ok(installations_dir)
     }
 
     fn default_log_path(data_dir: &Path) -> PathBuf {
