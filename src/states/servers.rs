@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 
 use crate::config::AppConfig;
 use crate::constants::SERVER_LIST_URL;
@@ -139,47 +139,34 @@ impl ServersState {
                 .await;
         }
 
+        async fn loop_body(app: Arc<AppState>) -> anyhow::Result<()> {
+            let req = app
+                .client
+                .get(SERVER_LIST_URL)
+                .send()
+                .await
+                .with_context(|| "Unable to create server list request")?
+                .error_for_status()
+                .with_context(|| "Bad server list response")?;
+
+            let resp = req
+                .json::<ServerListData>()
+                .await
+                .with_context(|| "Unable to decode server list request")?;
+
+            app.servers
+                .write()
+                .await
+                .update(app.clone(), resp)
+                .await
+                .with_context(|| "Unable to update server list")?;
+
+            Ok(())
+        }
+
         loop {
-            let req = match app.client.get(SERVER_LIST_URL).send().await {
-                Ok(req) => req,
-                Err(err) => {
-                    app.events
-                        .read()
-                        .await
-                        .error(anyhow!("Unable to create server list request: {}", err))
-                        .await;
-                    continue;
-                }
-            };
-            let req = match req.error_for_status() {
-                Ok(req) => req,
-                Err(err) => {
-                    app.events
-                        .read()
-                        .await
-                        .error(anyhow!("Bad server list response: {}", err))
-                        .await;
-                    continue;
-                }
-            };
-            let resp = match req.json::<ServerListData>().await {
-                Ok(resp) => resp,
-                Err(err) => {
-                    app.events
-                        .read()
-                        .await
-                        .error(anyhow!("Unable to decode server list request: {}", err))
-                        .await;
-                    continue;
-                }
-            };
-            if let Err(err) = app.servers.write().await.update(app.clone(), resp).await {
-                app.events
-                    .read()
-                    .await
-                    .error(anyhow!("Unable to update server list: {}", err))
-                    .await;
-                continue;
+            if let Err(err) = loop_body(Arc::clone(&app)).await {
+                app.events.read().await.error(err).await;
             }
 
             tokio::time::sleep(update_interval).await;
