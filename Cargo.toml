@@ -4,7 +4,7 @@ cargo-features = ["strip"]
 name = "rshub"
 version = "0.1.4"
 authors = ["Fogapod <fogaprod@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "Unofficial game launcher for UnityStation"
 homepage = "https://github.com/Fogapod/rshub"
 repository = "https://github.com/Fogapod/rshub"
@@ -12,7 +12,6 @@ license = "MIT"
 keywords = ["ss13", "unitystation", "ui", "cli", "terminal"]
 categories = ["command-line-utilities", "games"]
 exclude = [".github/*", ".assets/*"]
-
 
 [features]
 default = ["rustls"]
@@ -25,12 +24,15 @@ geolocation = []
 
 [dependencies]
 serde_json = "1"
-crossterm = "0.21"
 better-panic = "0.2.0"
 dirs-next = "2.0.0"
 async-trait = "0.1.51"
 bytesize = "1.1.0"
 anyhow = "1.0.43"
+
+[dependencies.crossterm]
+version = "0.21.0"
+features = ["event-stream"]
 
 [dependencies.parking_lot]
 version = "0.11.2"

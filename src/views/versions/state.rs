@@ -11,7 +11,6 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tui::widgets::TableState;
 
-use crate::config::AppConfig;
 use crate::datatypes::{
     game_version::{DownloadUrl, GameVersion},
     installation::{Installation, InstallationKind},
