@@ -15,17 +15,17 @@ impl Input for Servers {
             #[cfg(feature = "geolocation")]
             UserInput::Char('m' | 'M') => Some(AppAction::OpenView(ViewType::World)),
             UserInput::Char('i' | 'I') => {
-                if let Some(i) = self.selection.selected() {
+                if let Some(i) = self.state.read().selection.selected() {
                     Some(AppAction::InstallVersion(
-                        self.state.read().await.items[i].version.clone(),
+                        self.state.read().items[i].version.clone(),
                     ))
                 } else {
                     None
                 }
             }
             UserInput::Enter => {
-                if let Some(i) = self.selection.selected() {
-                    let server = &self.state.read().await.items[i];
+                if let Some(i) = self.state.read().selection.selected() {
+                    let server = &self.state.read().items[i];
 
                     Some(AppAction::ConnectToServer {
                         version: server.version.clone(),
@@ -35,7 +35,7 @@ impl Input for Servers {
                     None
                 }
             }
-            _ => self.selection.on_input(input, self.count().await),
+            _ => self.state.write().selection.on_input(input, self.count()),
         }
     }
 }

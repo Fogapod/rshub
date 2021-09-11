@@ -3,6 +3,8 @@ mod hotkeys;
 mod input;
 mod tab;
 
+use std::sync::Arc;
+
 use tui::widgets::ListState;
 
 use crate::states::StatelessList;
@@ -10,8 +12,9 @@ use crate::views::{AppView, Name};
 
 use tab::Tab;
 
+#[derive(Clone)]
 pub struct Tabs {
-    selection: StatelessList<ListState>,
+    selection: Arc<StatelessList<ListState>>,
 }
 
 impl Tabs {
@@ -20,7 +23,9 @@ impl Tabs {
 
         selection.select_first(Tab::tab_count());
 
-        Self { selection }
+        Self {
+            selection: Arc::new(selection),
+        }
     }
 
     fn selected_tab(&self) -> Tab {
@@ -30,7 +35,7 @@ impl Tabs {
     }
 
     fn select_tab(&mut self, tab: Tab) {
-        self.selection.select_index(tab.into());
+        //self.selection.select_index(tab.into());
     }
 }
 

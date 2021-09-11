@@ -26,7 +26,7 @@ impl HotKeys for Servers {
             },
         ];
 
-        hotkeys.append(&mut self.selection.hotkeys());
+        hotkeys.append(&mut self.state.read().selection.hotkeys());
 
         hotkeys
     }

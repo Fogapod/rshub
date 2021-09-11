@@ -15,20 +15,14 @@ use crate::views::Draw;
 
 use super::Commits;
 
-#[async_trait::async_trait]
 impl Draw for Commits {
-    async fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: Arc<AppState>,
-    ) {
+    fn draw(&self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>) {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(60), Constraint::Min(0)])
             .split(area);
 
-        let commits = &self.state.read().await.items;
+        let commits = &self.state.read().items;
 
         let items: Vec<ListItem> = commits
             .iter()
@@ -44,9 +38,9 @@ impl Draw for Commits {
             )
             .highlight_style(Style::default().bg(Color::DarkGray));
 
-        f.render_stateful_widget(list, chunks[0], &mut self.selection.state);
+        f.render_stateful_widget(list, chunks[0], &mut self.state.write().selection.state);
 
-        if let Some(i) = self.selection.state.selected() {
+        if let Some(i) = self.state.read().selection.state.selected() {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(3), Constraint::Min(0)])
@@ -79,13 +73,12 @@ impl Draw for Commits {
             );
         }
 
-        if !self.loaded {
-            if !app.config.offline {
-                app.watch_task(tokio::spawn(self.load(Arc::clone(&app))))
-                    .await;
-            }
+        // if !self.loaded {
+        //     if !app.config.offline {
+        //         self.load(app).await;
+        //     }
 
-            self.loaded = true;
-        }
+        //     self.loaded = true;
+        // }
     }
 }

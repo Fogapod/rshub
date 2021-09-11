@@ -10,15 +10,15 @@ pub enum Tab {
 }
 
 impl Tab {
-    async fn name(&self, app: Arc<AppState>) -> String {
+    pub fn name(&self, app: Arc<AppState>) -> String {
         match self {
             Self::Servers => {
-                format!("servers [{}]", app.servers.read().await.count())
+                format!("servers [{}]", app.servers.count())
             }
             Self::Versions => {
-                format!("versions [{}]", app.versions.read().await.count())
+                format!("versions [{}]", app.versions.count())
             }
-            Self::Commits => format!("commits [{}]", app.commits.read().await.items.len()),
+            Self::Commits => format!("commits [{}]", app.commits.count()),
         }
     }
 

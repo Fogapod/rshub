@@ -25,7 +25,7 @@ impl HotKeys for Versions {
             },
         ];
 
-        hotkeys.append(&mut self.selection.hotkeys());
+        //hotkeys.append(&mut self.selection.hotkeys());
 
         hotkeys
     }

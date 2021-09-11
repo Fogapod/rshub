@@ -122,6 +122,7 @@ fn _main() -> Result<(), Box<dyn std::error::Error>> {
                 rt.block_on(app.draw(f));
             })?;
 
+            // TODO: send input events to async channel instead
             match rx.recv()? {
                 EventOrTick::Input(event) => rt.block_on(app.on_input(&event)),
                 EventOrTick::Tick => {}

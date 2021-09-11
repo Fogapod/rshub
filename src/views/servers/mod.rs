@@ -8,29 +8,27 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tokio::sync::RwLock;
-use tui::widgets::TableState;
+use parking_lot::RwLock;
 
 use crate::datatypes::game_version::{DownloadUrl, GameVersion};
 use crate::datatypes::geolocation::IP;
 use crate::datatypes::server::{Address, Server, ServerListJson};
-use crate::states::{AppState, StatelessList};
+use crate::states::AppState;
 use crate::views::Name;
 
 use state::State;
 
 use crate::views::AppView;
 
+#[derive(Clone)]
 pub struct Servers {
-    state: Arc<RwLock<State>>,
-    selection: StatelessList<TableState>,
+    pub state: Arc<RwLock<State>>,
 }
 
 impl Servers {
     pub fn new() -> Self {
         Self {
             state: Arc::new(RwLock::new(State::new())),
-            selection: StatelessList::new(TableState::default(), false),
         }
     }
 
@@ -44,7 +42,7 @@ impl Servers {
                 download: DownloadUrl::new("http://evil.exploit"),
             };
 
-            self.state.write().await.items.push(Server {
+            self.state.write().items.push(Server {
                 name: "TEST SERVER PLEASE IGNORE".to_owned(),
                 address: Address {
                     ip: ip.clone(),
@@ -60,7 +58,7 @@ impl Servers {
             });
 
             #[cfg(feature = "geolocation")]
-            app.locations.write().await.resolve(&ip).await;
+            app.locations.write().resolve(&ip).await;
 
             // let _ = VersionsState::version_discovered(Arc::clone(&app), &version).await;
         }
@@ -73,12 +71,12 @@ impl Servers {
             .await;
     }
 
-    pub async fn count(&self) -> usize {
-        self.state.read().await.items.len()
+    pub fn count(&self) -> usize {
+        self.state.read().items.len()
     }
 
     pub async fn update(&self, app: Arc<AppState>, data: ServerListJson) {
-        let mut items = self.state.write().await.items;
+        let items = &mut self.state.write().items;
 
         let mut previously_online: HashMap<Address, &mut Server> =
             items.iter_mut().map(|i| (i.address.clone(), i)).collect();
@@ -96,7 +94,7 @@ impl Servers {
             if let Some(known_server) = previously_online.remove(&address) {
                 // download/build/fork changed
                 if known_server.version != version {
-                    VersionsState::version_discovered(Arc::clone(&app), &version).await;
+                    // VersionsState::version_discovered(Arc::clone(&app), &version).await;
                     known_server.version = version;
                 }
 
@@ -105,11 +103,11 @@ impl Servers {
                 known_server.offline = false;
             } else {
                 #[cfg(feature = "geolocation")]
-                app.locations.write().await.resolve(&ip).await;
+                app.locations.write().resolve(&ip).await;
 
                 created_servers.push(Server::new(address, version.clone(), sv));
 
-                VersionsState::version_discovered(Arc::clone(&app), &version).await;
+                // VersionsState::version_discovered(Arc::clone(&app), &version).await;
             }
         }
 

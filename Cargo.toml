@@ -32,6 +32,10 @@ async-trait = "0.1.51"
 bytesize = "1.1.0"
 anyhow = "1.0.43"
 
+[dependencies.parking_lot]
+version = "0.11.2"
+features = ["send_guard"]
+
 [dependencies.zip]
 version = "0.5.13"
 default-features = false
@@ -40,7 +44,7 @@ features = ["deflate"]
 [dependencies.tokio]
 version = "1"
 default-features = false
-features = ["rt-multi-thread", "sync", "fs", "process", "macros", "time"]
+features = ["rt-multi-thread", "fs", "process", "macros", "time"]
 
 [dependencies.futures]
 version = "0.3.16"

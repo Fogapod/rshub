@@ -20,15 +20,9 @@ use crate::views::Draw;
 
 use super::Servers;
 
-#[async_trait::async_trait]
 impl Draw for Servers {
-    async fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: Arc<AppState>,
-    ) {
-        let servers = self.state.read().await.items;
+    fn draw(&self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>) {
+        let servers = &self.state.read().items;
 
         let mut count_online = 0;
         let mut count_no_players = 0;
@@ -148,17 +142,17 @@ impl Draw for Servers {
             );
 
         // draw server info
-        if let Some(selected) = self.selection.selected().map(|s| &servers[s]) {
-            draw_server_info(f, chunks[1], Arc::clone(&app), selected).await;
+        if let Some(selected) = self.state.read().selection.selected().map(|s| &servers[s]) {
+            draw_server_info(f, chunks[1], Arc::clone(&app), selected);
         } else {
             draw_info(f, chunks[1], Arc::clone(&app));
         }
 
-        f.render_stateful_widget(table, chunks[0], &mut self.selection.state);
+        f.render_stateful_widget(table, chunks[0], &mut self.state.write().selection.state);
     }
 }
 
-async fn draw_server_info(
+fn draw_server_info(
     f: &mut Frame<'_, CrosstermBackend<io::Stdout>>,
     area: Rect,
     app: Arc<AppState>,
@@ -166,7 +160,7 @@ async fn draw_server_info(
 ) {
     #[cfg(feature = "geolocation")]
     let selected_location =
-        if let Some(location) = app.locations.read().await.items.get(&selected.address.ip) {
+        if let Some(location) = app.locations.read().items.get(&selected.address.ip) {
             format!("{}/{}", location.country, location.city)
         } else {
             "unknown".to_owned()

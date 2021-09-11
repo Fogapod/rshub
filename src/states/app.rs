@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use tokio::sync::RwLock;
+use parking_lot::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 
 use anyhow::Result;
@@ -23,7 +23,7 @@ pub type TaskResult = Result<()>;
 pub struct AppState {
     pub config: AppConfig,
     pub commits: Commits,
-    //pub versions: Arc<RwLock<VersionsState>>,
+    pub versions: Versions,
     #[cfg(feature = "geolocation")]
     pub locations: Arc<RwLock<LocationsState>>,
     pub servers: Servers,
@@ -46,7 +46,7 @@ impl AppState {
 
         let instance = Arc::new(Self {
             commits: Commits::new(),
-            //versions: versions.clone(),
+            versions: versions.clone(),
             #[cfg(feature = "geolocation")]
             locations: locations.clone(),
             servers: servers.clone(),
@@ -62,10 +62,10 @@ impl AppState {
             panic_bool,
         });
 
-        events.write().await.run(instance.clone()).await;
+        events.write().run(instance.clone()).await;
         servers.run(instance.clone()).await;
         #[cfg(feature = "geolocation")]
-        locations.write().await.run(instance.clone()).await;
+        locations.write().run(instance.clone()).await;
         //versions.write().await.run(instance.clone()).await;
         instance
     }
@@ -103,7 +103,7 @@ impl AppState {
     }
 
     pub fn display_help(&self, view_name: &str, keys: &[HotKey]) {
-        let mut help = self.help.lock().unwrap();
+        let mut help = self.help.lock();
         help.set_name(view_name);
         help.set_hotkeys(keys);
     }
@@ -132,7 +132,7 @@ impl AppState {
             }
             Ok(result) => {
                 if let Err(err) = result {
-                    events.read().await.error(err).await;
+                    events.read().error(err).await;
                 }
             }
         }

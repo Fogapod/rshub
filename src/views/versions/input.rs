@@ -11,58 +11,56 @@ use super::Versions;
 impl Input for Versions {
     async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
         match input {
-            UserInput::Refresh => {
-                let mut versions = self.state.write().await;
+            // UserInput::Refresh => {
+            //     let mut versions = self.state.write();
 
-                versions.refresh(app.clone()).await;
+            //     versions.refresh(app.clone()).await;
 
-                if let Some(i) = self.selection.selected() {
-                    if i >= versions.count() {
-                        self.selection.unselect();
-                    }
-                }
+            //     if let Some(i) = self.selection.selected() {
+            //         if i >= versions.items.len() {
+            //             self.selection.unselect();
+            //         }
+            //     }
 
-                None
-            }
-            UserInput::Char('i' | 'I') => {
-                if let Some(i) = self.selection.selected() {
-                    Some(AppAction::InstallVersion(
-                        self.state.read().await.items[i].version.clone(),
-                    ))
-                } else {
-                    None
-                }
-            }
-            UserInput::Char('d' | 'D') => {
-                if let Some(i) = self.selection.selected() {
-                    Some(AppAction::UninstallVersion(
-                        self.state.read().await.items[i].version.clone(),
-                    ))
-                } else {
-                    None
-                }
-            }
-            UserInput::Char('a' | 'A') => {
-                if let Some(i) = self.selection.selected() {
-                    Some(AppAction::AbortVersionInstallation(
-                        self.state.read().await.items[i].version.clone(),
-                    ))
-                } else {
-                    None
-                }
-            }
-            UserInput::Enter => {
-                if let Some(i) = self.selection.selected() {
-                    Some(AppAction::LaunchVersion(
-                        self.state.read().await.items[i].version.clone(),
-                    ))
-                } else {
-                    None
-                }
-            }
-            _ => self
-                .selection
-                .on_input(input, self.state.read().await.count()),
+            //     None
+            // }
+            // UserInput::Char('i' | 'I') => {
+            //     if let Some(i) = self.selection.selected() {
+            //         Some(AppAction::InstallVersion(
+            //             self.state.read().items[i].version.clone(),
+            //         ))
+            //     } else {
+            //         None
+            //     }
+            // }
+            // UserInput::Char('d' | 'D') => {
+            //     if let Some(i) = self.selection.selected() {
+            //         Some(AppAction::UninstallVersion(
+            //             self.state.read().items[i].version.clone(),
+            //         ))
+            //     } else {
+            //         None
+            //     }
+            // }
+            // UserInput::Char('a' | 'A') => {
+            //     if let Some(i) = self.selection.selected() {
+            //         Some(AppAction::AbortVersionInstallation(
+            //             self.state.read().items[i].version.clone(),
+            //         ))
+            //     } else {
+            //         None
+            //     }
+            // }
+            // UserInput::Enter => {
+            //     if let Some(i) = self.selection.selected() {
+            //         Some(AppAction::LaunchVersion(
+            //             self.state.read().items[i].version.clone(),
+            //         ))
+            //     } else {
+            //         None
+            //     }
+            // }
+            _ => None, //self.selection.on_input(input, self.count()),
         }
     }
 }

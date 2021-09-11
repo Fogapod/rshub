@@ -27,14 +27,8 @@ pub enum ViewType {
     Help,
 }
 
-#[async_trait::async_trait]
 pub trait Draw {
-    async fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: Arc<AppState>,
-    );
+    fn draw(&self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>);
 }
 
 #[async_trait::async_trait]

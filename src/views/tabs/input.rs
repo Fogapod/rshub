@@ -24,16 +24,17 @@ impl Input for Tabs {
                 self.select_tab(Tab::Commits);
                 None
             }
-            UserInput::Tab => {
-                self.selection.select_next(Tab::tab_count());
-                None
-            }
+            // UserInput::Tab => {
+            //     self.state.write().selection.select_next(Tab::tab_count());
+            //     None
+            // }
             // cannot move this to function because of match limitation for arms
             // even if they implement same trait
             _ => match self.selected_tab() {
-                Tab::Servers => app.servers.on_input(input, app).await,
-                Tab::Versions => app.versions.on_input(input, app).await,
-                Tab::Commits => app.commits.on_input(input, app).await,
+                _ => None
+                // Tab::Servers => app.servers.on_input(input, app).await,
+                // Tab::Versions => app.versions.on_input(input, app).await,
+                // Tab::Commits => app.commits.on_input(input, app).await,
             },
         }
     }

@@ -88,7 +88,7 @@ impl LocationsState {
 
         log::debug!("resolved location: {:?} -> {:?}", ip, location);
 
-        app.locations.write().await.items.insert(ip, location);
+        app.locations.write().items.insert(ip, location);
 
         Ok(())
     }

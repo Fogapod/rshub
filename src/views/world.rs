@@ -58,18 +58,12 @@ impl HotKeys for World {
     }
 }
 
-#[async_trait::async_trait]
 impl Draw for World {
     // TODO: render selected with labels by default, all without labels
     // TODO: zoom and map navigation
-    async fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: Arc<AppState>,
-    ) {
-        let locations = &app.locations.read().await.items;
-        let servers = &app.servers.read().await.items;
+    fn draw(&self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>) {
+        let locations = &app.locations.read().items;
+        let servers = &app.servers.state.read().items;
 
         let map = Canvas::default()
             .block(Block::default().borders(Borders::ALL))

@@ -5,28 +5,26 @@ mod state;
 
 use std::sync::Arc;
 
-use crossterm::event::KeyCode;
+use parking_lot::RwLock;
 
-use tokio::sync::RwLock;
-
-use tui::widgets::TableState;
-
-use crate::states::StatelessList;
 use crate::views::Name;
 
 use state::State;
 
+#[derive(Clone)]
 pub struct Versions {
-    state: Arc<RwLock<State>>,
-    selection: StatelessList<TableState>,
+    pub state: Arc<RwLock<State>>,
 }
 
 impl Versions {
     pub fn new() -> Self {
         Self {
             state: Arc::new(RwLock::new(State::new())),
-            selection: StatelessList::new(TableState::default(), false),
         }
+    }
+
+    pub fn count(&self) -> usize {
+        self.state.read().items.len()
     }
 }
 

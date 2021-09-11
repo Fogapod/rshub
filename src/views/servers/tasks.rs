@@ -12,9 +12,9 @@ use crate::states::AppState;
 
 pub async fn server_fetch_task(app: Arc<AppState>) -> TaskResult {
     #[cfg(feature = "geolocation")]
-    app.locations.write().await.resolve(&IP::Local).await;
+    app.locations.write().resolve(&IP::Local).await;
 
-    async fn loop_body(app: AppState) -> anyhow::Result<()> {
+    async fn loop_body(app: Arc<AppState>) -> anyhow::Result<()> {
         let data = app
             .client
             .get(SERVER_LIST_URL)
@@ -26,15 +26,15 @@ pub async fn server_fetch_task(app: Arc<AppState>) -> TaskResult {
             .await
             .with_context(|| "parsing server list response")?;
 
-        app.servers.write().await.update(app.clone(), data).await;
+        app.servers.update(Arc::clone(&app), data).await;
 
         Ok(())
     }
 
     let interval = Duration::from_secs(app.config.update_interval);
     loop {
-        if let Err(err) = loop_body(app).await {
-            app.events.read().await.error(err).await;
+        if let Err(err) = loop_body(Arc::clone(&app)).await {
+            app.events.read().error(err).await;
         }
 
         tokio::time::sleep(interval).await;

@@ -77,22 +77,20 @@ impl App {
             if let Some(widget) = self.views.get_mut(tp) {
                 use tui::layout::{Constraint, Direction, Layout};
 
-                let area = if self.state.events.read().await.current_event.is_some() {
+                let area = if self.state.events.read().current_event.is_some() {
                     let chunks = Layout::default()
                         .constraints(vec![Constraint::Min(0), Constraint::Length(1)])
                         .direction(Direction::Vertical)
                         .split(f.size());
 
-                    self.events_view
-                        .draw(f, chunks[1], Arc::clone(&self.state))
-                        .await;
+                    self.events_view.draw(f, chunks[1], Arc::clone(&self.state));
 
                     chunks[0]
                 } else {
                     f.size()
                 };
 
-                widget.draw(f, area, Arc::clone(&self.state)).await;
+                widget.draw(f, area, Arc::clone(&self.state));
             }
         }
     }

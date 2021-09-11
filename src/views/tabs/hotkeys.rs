@@ -31,11 +31,11 @@ impl HotKeys for Tabs {
             },
         ];
 
-        hotkeys.append(&mut match self.selected_tab() {
-            Tab::Servers => self.view_servers.hotkeys(),
-            Tab::Versions => self.view_versions.hotkeys(),
-            Tab::Commits => self.view_commits.hotkeys(),
-        });
+        // hotkeys.append(&mut match self.selected_tab() {
+        //     Tab::Servers => self.view_servers.hotkeys(),
+        //     Tab::Versions => self.view_versions.hotkeys(),
+        //     Tab::Commits => self.view_commits.hotkeys(),
+        // });
 
         hotkeys
     }

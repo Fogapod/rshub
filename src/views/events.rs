@@ -16,15 +16,9 @@ use crate::views::Draw;
 
 pub struct EventsView {}
 
-#[async_trait::async_trait]
 impl Draw for EventsView {
-    async fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: Arc<AppState>,
-    ) {
-        if let Some(event) = &app.events.read().await.current_event {
+    fn draw(&self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>) {
+        if let Some(event) = &app.events.read().current_event {
             let mut style = Style::default().add_modifier(Modifier::BOLD);
             let mut border_style = Style::default();
 

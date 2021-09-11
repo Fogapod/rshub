@@ -9,7 +9,7 @@ use futures::stream::StreamExt;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
-use tokio::sync::RwLock;
+use tui::widgets::TableState;
 
 use crate::config::AppConfig;
 use crate::datatypes::{
@@ -19,15 +19,18 @@ use crate::datatypes::{
     value_sorted_map::ValueSortedMap,
 };
 use crate::states::app::{AppState, TaskResult};
+use crate::states::StatelessList;
 
 pub struct State {
     pub items: ValueSortedMap<GameVersion, Installation>,
+    pub selection: StatelessList<TableState>,
 }
 
 impl State {
     pub fn new() -> Self {
         Self {
             items: ValueSortedMap::new(),
+            selection: StatelessList::new(TableState::default(), false),
         }
     }
 
@@ -35,32 +38,24 @@ impl State {
         self.spawn_installation_finder(app.clone()).await;
     }
 
-    pub fn count(&self) -> usize {
-        self.items.len()
-    }
-
-    pub async fn spawn_installation_finder(&mut self, app: Arc<AppState>) {
+    pub async fn spawn_installation_finder(&self, app: Arc<AppState>) {
         app.watch_task(tokio::task::spawn(Self::fs_installation_finder_task(
-            app.config.clone(),
-            app.versions.clone(),
+            Arc::clone(&app),
         )))
         .await;
     }
 
-    async fn fs_installation_finder_task(
-        app: AppConfig,
-        versions: Arc<RwLock<Self>>,
-    ) -> TaskResult {
+    async fn fs_installation_finder_task(app: Arc<AppState>) -> TaskResult {
         log::debug!(
             "installation directory: {}",
-            &app.dirs.installations_dir.display()
+            &app.config.dirs.installations_dir.display()
         );
 
-        let mut dirs = fs::read_dir(app.dirs.installations_dir)
+        let mut dirs = fs::read_dir(&app.config.dirs.installations_dir)
             .await
             .with_context(|| "Unable to read installation directory")?;
 
-        let mut versions = versions.write().await;
+        let mut versions = app.versions.state.write();
 
         while let Some(fork_dirs) = dirs
             .next_entry()
@@ -134,7 +129,7 @@ impl State {
         });
 
         // grab versions from servers state
-        for server in &app.servers.read().await.items {
+        for server in &app.servers.state.read().items {
             // these are the ones we filtered out
             if self.items.get(&server.version).is_some() {
                 continue;
@@ -152,7 +147,6 @@ impl State {
         self.spawn_installation_finder(app.clone()).await;
         app.events
             .read()
-            .await
             .event("Refreshed installation list (still looking in file system)")
             .await;
     }
@@ -160,7 +154,7 @@ impl State {
     pub async fn version_discovered(app: Arc<AppState>, version: &GameVersion) {
         log::debug!("discovered: {}", version);
 
-        let mut versions = app.versions.write().await;
+        let mut versions = app.versions.state.write();
 
         if let Some(existing) = versions.items.get(version).cloned() {
             if !matches!(&existing.kind, InstallationKind::Discovered) {
@@ -172,7 +166,6 @@ impl State {
 
         app.events
             .read()
-            .await
             .event(&format!("Discovered {}", version))
             .await;
 
@@ -206,11 +199,10 @@ impl State {
 
         app.events
             .read()
-            .await
             .event(&format!("Downloading {}", version))
             .await;
 
-        match app.versions.read().await.items.get(&version) {
+        match app.versions.state.read().items.get(&version) {
             Some(Installation {
                 kind: InstallationKind::Discovered,
                 ..
@@ -255,7 +247,7 @@ impl State {
 
         let mut progress = 0;
 
-        versions.write().await.items.insert(
+        versions.state.write().items.insert(
             version.clone(),
             Installation {
                 version: version.clone(),
@@ -277,7 +269,7 @@ impl State {
 
             progress += chunk.len();
 
-            let mut versions = versions.write().await;
+            let mut versions = versions.state.write();
             let previous = versions.items.insert(
                 version.clone(),
                 Installation {
@@ -312,7 +304,7 @@ impl State {
             }
         }
 
-        versions.write().await.items.insert(
+        versions.state.write().items.insert(
             version.clone(),
             Installation {
                 version: version.clone(),
@@ -327,7 +319,6 @@ impl State {
 
         app.events
             .read()
-            .await
             .event(&format!("Extracting {}", version))
             .await;
 
@@ -352,7 +343,7 @@ impl State {
             );
         }
 
-        versions.write().await.items.insert(
+        versions.state.write().items.insert(
             version.clone(),
             Installation {
                 version: version.clone(),
@@ -366,7 +357,6 @@ impl State {
 
         app.events
             .read()
-            .await
             .event(&format!("Installed version {}", version))
             .await;
 
@@ -374,7 +364,7 @@ impl State {
     }
 
     pub async fn abort_installation(app: Arc<AppState>, version: GameVersion) -> TaskResult {
-        let mut versions = app.versions.write().await;
+        let mut versions = app.versions.state.write();
 
         if matches!(
             versions.items.get(&version),
@@ -393,7 +383,6 @@ impl State {
 
             app.events
                 .read()
-                .await
                 .event(&format!("Aborted installation of {}", version))
                 .await;
         } else {
@@ -409,7 +398,7 @@ impl State {
         path.push(PathBuf::from(version.clone()));
 
         // lock in advance
-        let mut versions = app.versions.write().await;
+        let mut versions = app.versions.state.write();
 
         match versions.items.get(&version) {
             Some(Installation {
@@ -431,7 +420,6 @@ impl State {
 
         app.events
             .read()
-            .await
             .event(&format!("Uninstalled {}", version))
             .await;
 
@@ -445,14 +433,13 @@ impl State {
     ) -> TaskResult {
         app.events
             .read()
-            .await
             .event(&format!("Launching {}", version))
             .await;
 
         if !matches!(
             app.versions
+                .state
                 .read()
-                .await
                 .items
                 .get(&version)
                 .ok_or_else(|| anyhow!("desync: version not in installation list"))?,

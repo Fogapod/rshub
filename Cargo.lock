@@ -1126,6 +1126,7 @@ dependencies = [
  "dirs-next",
  "futures",
  "log",
+ "parking_lot",
  "reqwest",
  "serde",
  "serde_json",

@@ -66,15 +66,9 @@ impl Progress {
     }
 }
 
-#[async_trait::async_trait]
 impl Draw for Versions {
-    async fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: Arc<AppState>,
-    ) {
-        let versions = &self.state.read().await.items;
+    fn draw(&self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>) {
+        let versions = &self.state.read().items;
 
         let mut total_size = 0;
         let mut in_progress = Vec::new();
@@ -164,7 +158,7 @@ impl Draw for Versions {
                     .add_modifier(Modifier::BOLD),
             );
 
-        f.render_stateful_widget(table, chunks[0], &mut self.selection.state);
+        //f.render_stateful_widget(table, chunks[0], &mut self.selection.state);
 
         if !in_progress.is_empty() {
             let mut progress_bars_constraints = Vec::new();

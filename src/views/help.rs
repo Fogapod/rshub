@@ -23,14 +23,12 @@ pub struct Help {}
 
 impl AppView for Help {}
 
-#[async_trait::async_trait]
 impl Name for Help {
     fn name(&self) -> String {
         "Help Screen".to_owned()
     }
 }
 
-#[async_trait::async_trait]
 impl HotKeys for Help {
     fn hotkeys(&self) -> Vec<HotKey> {
         vec![HotKey {
@@ -51,15 +49,9 @@ impl Input for Help {
     }
 }
 
-#[async_trait::async_trait]
 impl Draw for Help {
-    async fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: Arc<AppState>,
-    ) {
-        let help = app.help.lock().unwrap();
+    fn draw(&self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>) {
+        let help = app.help.lock();
 
         let list_length = (help.global_hotkeys.len() + help.local_hotkeys.len()) as u16
         + 2  // outer border

@@ -12,22 +12,14 @@ use tui::{
     Frame,
 };
 
-use futures::stream::{self, StreamExt};
-
 use crate::states::AppState;
 use crate::views::Draw;
 
 use super::tab::Tab;
 use super::Tabs;
 
-#[async_trait::async_trait]
 impl Draw for Tabs {
-    async fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: Arc<AppState>,
-    ) {
+    fn draw(&self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(1), Constraint::Min(0)].as_ref())
@@ -38,16 +30,10 @@ impl Draw for Tabs {
             .constraints([Constraint::Min(0)])
             .split(chunks[0]);
 
-        let tabs = stream::iter(Tab::all())
-            .then(|t| {
-                let cloned_app = Arc::clone(&app);
-                async move { Spans::from(t.name(cloned_app).await) }
-            })
-            .collect()
-            .await;
+        let tabs = Tab::all().map(|t| Spans::from(t.name(Arc::clone(&app))));
 
         f.render_widget(
-            TuiTabs::new(tabs)
+            TuiTabs::new(tabs.to_vec())
                 .block(Block::default().border_type(BorderType::Plain))
                 .highlight_style(
                     Style::default()
@@ -61,10 +47,10 @@ impl Draw for Tabs {
 
         // cannot move this to function because of match limitation for arms
         // even if they implement same trait
-        match self.selected_tab() {
-            Tab::Servers => self.view_servers.draw(f, chunks[1], app).await,
-            Tab::Versions => self.view_versions.draw(f, chunks[1], app).await,
-            Tab::Commits => self.view_commits.draw(f, chunks[1], app).await,
-        };
+        // match self.selected_tab() {
+        //     Tab::Servers => self.view_servers.draw(f, chunks[1], app).await,
+        //     Tab::Versions => self.view_versions.draw(f, chunks[1], app).await,
+        //     Tab::Commits => self.view_commits.draw(f, chunks[1], app).await,
+        // };
     }
 }
