@@ -1,72 +1,24 @@
 use std::io;
 use std::sync::Arc;
 
-use bytesize::ByteSize;
-
-use crossterm::event::KeyCode;
-
 use tui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::Span,
-    widgets::{Block, Borders, Gauge, Row, Table, TableState},
+    widgets::{Block, Borders, Gauge, Row, Table},
     Frame,
 };
 
-use crate::app::AppAction;
-use crate::datatypes::{
-    game_version::{DownloadUrl, GameVersion},
-    installation::InstallationKind,
-};
-use crate::input::UserInput;
-use crate::states::help::HotKey;
-use crate::states::{AppState, StatelessList};
-use crate::views::{Drawable, HotKeys, InputProcessor, Named};
+use bytesize::ByteSize;
 
-pub struct VersionView {
-    state: StatelessList<TableState>,
-}
+use crate::datatypes::game_version::DownloadUrl;
+use crate::datatypes::game_version::GameVersion;
+use crate::datatypes::installation::InstallationKind;
+use crate::states::AppState;
+use crate::views::Draw;
 
-impl VersionView {
-    pub fn new() -> Self {
-        Self {
-            state: StatelessList::new(TableState::default(), false),
-        }
-    }
-}
-
-impl Named for VersionView {
-    fn name(&self) -> String {
-        "Version List".to_owned()
-    }
-}
-
-impl HotKeys for VersionView {
-    fn hotkeys(&self) -> Vec<HotKey> {
-        let mut hotkeys = vec![
-            HotKey {
-                description: "Refresh version list",
-                key: KeyCode::F(5),
-                modifiers: None,
-            },
-            HotKey {
-                description: "Install selected version",
-                key: KeyCode::Char('i'),
-                modifiers: None,
-            },
-            HotKey {
-                description: "Run selected version (installs if needed)",
-                key: KeyCode::Enter,
-                modifiers: None,
-            },
-        ];
-
-        hotkeys.append(&mut self.state.hotkeys());
-
-        hotkeys
-    }
-}
+use super::Versions;
 
 enum Progress {
     Downloading {
@@ -114,75 +66,9 @@ impl Progress {
     }
 }
 
-#[async_trait::async_trait]
-impl InputProcessor for VersionView {
-    async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
-        match input {
-            UserInput::Refresh => {
-                let mut versions = app.versions.write().await;
-
-                versions.refresh(app.clone()).await;
-
-                if let Some(i) = self.state.selected() {
-                    if i >= versions.count() {
-                        self.state.unselect();
-                    }
-                }
-
-                None
-            }
-            UserInput::Char('i' | 'I') => {
-                if let Some(i) = self.state.selected() {
-                    Some(AppAction::InstallVersion(
-                        app.versions.read().await.items[i].version.clone(),
-                    ))
-                } else {
-                    None
-                }
-            }
-            UserInput::Char('d' | 'D') => {
-                if let Some(i) = self.state.selected() {
-                    Some(AppAction::UninstallVersion(
-                        app.versions.read().await.items[i].version.clone(),
-                    ))
-                } else {
-                    None
-                }
-            }
-            UserInput::Char('a' | 'A') => {
-                if let Some(i) = self.state.selected() {
-                    Some(AppAction::AbortVersionInstallation(
-                        app.versions.read().await.items[i].version.clone(),
-                    ))
-                } else {
-                    None
-                }
-            }
-            UserInput::Enter => {
-                if let Some(i) = self.state.selected() {
-                    Some(AppAction::LaunchVersion(
-                        app.versions.read().await.items[i].version.clone(),
-                    ))
-                } else {
-                    None
-                }
-            }
-            _ => self
-                .state
-                .on_input(input, app.versions.read().await.count()),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl Drawable for VersionView {
-    async fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: Arc<AppState>,
-    ) {
-        let versions = &app.versions.read().await.items;
+impl Draw for Versions {
+    fn draw(&self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>) {
+        let versions = &self.state.read().items;
 
         let mut total_size = 0;
         let mut in_progress = Vec::new();
@@ -272,7 +158,7 @@ impl Drawable for VersionView {
                     .add_modifier(Modifier::BOLD),
             );
 
-        f.render_stateful_widget(table, chunks[0], &mut self.state.state);
+        //f.render_stateful_widget(table, chunks[0], &mut self.selection.state);
 
         if !in_progress.is_empty() {
             let mut progress_bars_constraints = Vec::new();

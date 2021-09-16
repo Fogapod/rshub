@@ -1,8 +1,6 @@
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
+use std::convert::TryFrom;
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseEventKind};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEventKind};
 
 #[derive(Debug)]
 pub enum UserInput {
@@ -29,8 +27,10 @@ pub enum UserInput {
     Char(char),
 }
 
-impl UserInput {
-    fn from(event: Event) -> Option<Self> {
+impl TryFrom<&Event> for UserInput {
+    type Error = ();
+
+    fn try_from(event: &Event) -> Result<Self, Self::Error> {
         match event {
             Event::Key(key) => match key {
                 KeyEvent {
@@ -40,94 +40,63 @@ impl UserInput {
                 | KeyEvent {
                     code: KeyCode::Char('q' | 'Q'),
                     ..
-                } => Some(Self::Quit),
+                } => Ok(Self::Quit),
                 KeyEvent {
                     code: KeyCode::Char(c),
                     ..
-                } => Some(Self::Char(c)),
+                } => Ok(Self::Char(*c)),
                 KeyEvent {
                     code: KeyCode::Left,
                     ..
-                } => Some(Self::Left),
+                } => Ok(Self::Left),
                 KeyEvent {
                     code: KeyCode::Right,
                     ..
-                } => Some(Self::Right),
+                } => Ok(Self::Right),
                 KeyEvent {
                     code: KeyCode::Up, ..
-                } => Some(Self::Up),
+                } => Ok(Self::Up),
                 KeyEvent {
                     code: KeyCode::Down,
                     ..
-                } => Some(Self::Down),
+                } => Ok(Self::Down),
                 KeyEvent {
                     code: KeyCode::Home,
                     ..
-                } => Some(Self::Top),
+                } => Ok(Self::Top),
                 KeyEvent {
                     code: KeyCode::End, ..
-                } => Some(Self::Bottom),
+                } => Ok(Self::Bottom),
                 KeyEvent {
                     code: KeyCode::Esc, ..
-                } => Some(Self::Back),
+                } => Ok(Self::Back),
                 KeyEvent {
                     code: KeyCode::Enter,
                     ..
-                } => Some(Self::Enter),
+                } => Ok(Self::Enter),
                 KeyEvent {
                     code: KeyCode::Delete | KeyCode::Backspace,
                     ..
-                } => Some(Self::Delete),
+                } => Ok(Self::Delete),
                 KeyEvent {
                     code: KeyCode::Tab, ..
-                } => Some(Self::Tab),
+                } => Ok(Self::Tab),
                 KeyEvent {
                     code: KeyCode::F(1),
                     ..
-                } => Some(Self::Help),
+                } => Ok(Self::Help),
                 KeyEvent {
                     code: KeyCode::F(5),
                     ..
-                } => Some(Self::Refresh),
-                _ => None,
+                } => Ok(Self::Refresh),
+                _ => Err(()),
             },
             Event::Mouse(mouse) => match mouse.kind {
-                MouseEventKind::ScrollUp => Some(Self::Up),
-                MouseEventKind::ScrollDown => Some(Self::Down),
-                _ => None,
+                MouseEventKind::ScrollUp => Ok(Self::Up),
+                MouseEventKind::ScrollDown => Ok(Self::Down),
+                _ => Err(()),
             },
-            _ => None,
+            _ => Err(()),
         }
     }
-}
-
-pub(crate) enum EventOrTick<I> {
-    Input(I),
-    Tick,
-}
-
-pub(crate) fn spawn_input_thread(interval: Duration) -> mpsc::Receiver<EventOrTick<UserInput>> {
-    let (tx, rx) = mpsc::channel();
-
-    thread::Builder::new()
-        .name("input".to_owned())
-        .spawn(move || loop {
-            let event = if event::poll(interval).unwrap() {
-                if let Some(valid_input) = UserInput::from(event::read().unwrap()) {
-                    EventOrTick::Input(valid_input)
-                } else {
-                    EventOrTick::Tick
-                }
-            } else {
-                EventOrTick::Tick
-            };
-
-            if let Err(e) = tx.send(event) {
-                log::error!("failed to send input event, probably closed channel: {}", e);
-                break;
-            }
-        })
-        .expect("unable to spawn input thread");
-
-    rx
 }

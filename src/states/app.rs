@@ -1,49 +1,51 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use tokio::sync::RwLock;
+use parking_lot::{Mutex, RwLock};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use anyhow::Result;
 
-use crate::app::AppAction;
+use crate::app::{AppAction, StopSignal};
 use crate::config::AppConfig;
 use crate::constants::USER_AGENT;
+use crate::datatypes::hotkey::HotKey;
 use crate::states::events::EventsState;
 use crate::states::help::HelpState;
-use crate::states::help::HotKey;
 #[cfg(feature = "geolocation")]
 use crate::states::LocationsState;
-use crate::states::{CommitState, ServersState, VersionsState};
+use crate::views::commits::Commits;
+use crate::views::servers::Servers;
+use crate::views::versions::Versions;
 
 pub type TaskResult = Result<()>;
 
 pub struct AppState {
     pub config: AppConfig,
-    pub commits: Arc<RwLock<CommitState>>,
-    pub versions: Arc<RwLock<VersionsState>>,
+    pub commits: Commits,
+    pub versions: Versions,
     #[cfg(feature = "geolocation")]
     pub locations: Arc<RwLock<LocationsState>>,
-    pub servers: Arc<RwLock<ServersState>>,
+    pub servers: Servers,
     pub events: Arc<RwLock<EventsState>>,
 
     pub help: Mutex<HelpState>,
 
     pub client: reqwest::Client,
 
-    panic_bool: Arc<AtomicBool>,
+    kill_switch: mpsc::Sender<StopSignal>,
 }
 
 impl AppState {
-    pub async fn new(config: AppConfig, panic_bool: Arc<AtomicBool>) -> Arc<Self> {
+    pub fn new(config: AppConfig, kill_switch: mpsc::Sender<StopSignal>) -> Self {
         #[cfg(feature = "geolocation")]
-        let locations = Arc::new(RwLock::new(LocationsState::new(&config).await));
-        let versions = Arc::new(RwLock::new(VersionsState::new(&config).await));
-        let servers = Arc::new(RwLock::new(ServersState::new(&config).await));
-        let events = Arc::new(RwLock::new(EventsState::new(&config).await));
+        let locations = Arc::new(RwLock::new(LocationsState::new(&config)));
+        let versions = Versions::new();
+        let servers = Servers::new();
+        let events = Arc::new(RwLock::new(EventsState::new(&config)));
 
-        let instance = Arc::new(Self {
-            commits: Arc::new(RwLock::new(CommitState::new().await)),
+        Self {
+            commits: Commits::new(),
             versions: versions.clone(),
             #[cfg(feature = "geolocation")]
             locations: locations.clone(),
@@ -57,52 +59,52 @@ impl AppState {
 
             help: Mutex::new(HelpState::new()),
 
-            panic_bool,
-        });
+            kill_switch,
+        }
+    }
 
-        events.write().await.run(instance.clone()).await;
-        servers.write().await.run(instance.clone()).await;
+    pub async fn run(&self, instance: Arc<Self>) {
+        self.events.write().run(instance.clone()).await;
+        self.servers.run(instance.clone()).await;
         #[cfg(feature = "geolocation")]
-        locations.write().await.run(instance.clone()).await;
-        versions.write().await.run(instance.clone()).await;
-
-        instance
+        self.locations.write().run(instance.clone()).await;
+        //self.versions.write().await.run(instance.clone()).await;
     }
 
     pub async fn on_action(&self, action: &AppAction, app: Arc<AppState>) {
         log::debug!("action: {:?}", &action);
 
-        let f = match action {
-            AppAction::ConnectToServer { version, address } => Some(tokio::spawn(
-                VersionsState::launch(Arc::clone(&app), version.clone(), Some(address.clone())),
-            )),
-            AppAction::InstallVersion(version) => Some(tokio::spawn(VersionsState::install(
-                Arc::clone(&app),
-                version.clone(),
-            ))),
-            AppAction::LaunchVersion(version) => Some(tokio::spawn(VersionsState::launch(
-                Arc::clone(&app),
-                version.clone(),
-                None,
-            ))),
-            AppAction::AbortVersionInstallation(version) => Some(tokio::spawn(
-                VersionsState::abort_installation(Arc::clone(&app), version.clone()),
-            )),
-            AppAction::UninstallVersion(version) => Some(tokio::spawn(VersionsState::uninstall(
-                Arc::clone(&app),
-                version.clone(),
-            ))),
+        // let f = match action {
+        //     AppAction::ConnectToServer { version, address } => Some(tokio::spawn(
+        //         VersionsState::launch(Arc::clone(&app), version.clone(), Some(address.clone())),
+        //     )),
+        //     AppAction::InstallVersion(version) => Some(tokio::spawn(VersionsState::install(
+        //         Arc::clone(&app),
+        //         version.clone(),
+        //     ))),
+        //     AppAction::LaunchVersion(version) => Some(tokio::spawn(VersionsState::launch(
+        //         Arc::clone(&app),
+        //         version.clone(),
+        //         None,
+        //     ))),
+        //     AppAction::AbortVersionInstallation(version) => Some(tokio::spawn(
+        //         VersionsState::abort_installation(Arc::clone(&app), version.clone()),
+        //     )),
+        //     AppAction::UninstallVersion(version) => Some(tokio::spawn(VersionsState::uninstall(
+        //         Arc::clone(&app),
+        //         version.clone(),
+        //     ))),
 
-            _ => None,
-        };
+        //     _ => None,
+        // };
 
-        if let Some(f) = f {
-            self.watch_task(f).await;
-        }
+        // if let Some(f) = f {
+        //     self.watch_task(f).await;
+        // }
     }
 
     pub fn display_help(&self, view_name: &str, keys: &[HotKey]) {
-        let mut help = self.help.lock().unwrap();
+        let mut help = self.help.lock();
         help.set_name(view_name);
         help.set_hotkeys(keys);
     }
@@ -110,14 +112,14 @@ impl AppState {
     pub async fn watch_task(&self, task: JoinHandle<TaskResult>) {
         tokio::spawn(Self::wrap_task(
             task,
-            self.panic_bool.clone(),
+            self.kill_switch.clone(),
             self.events.clone(),
         ));
     }
 
     async fn wrap_task(
         task: JoinHandle<TaskResult>,
-        panic_bool: Arc<AtomicBool>,
+        kill_switch: mpsc::Sender<StopSignal>,
         events: Arc<RwLock<EventsState>>,
     ) {
         match task.await {
@@ -126,12 +128,12 @@ impl AppState {
 
                 if err.is_panic() {
                     log::error!("error is panic, setting panic to exit on next tick");
-                    panic_bool.store(true, Ordering::Relaxed);
+                    kill_switch.send(StopSignal::Panic).await.unwrap();
                 }
             }
             Ok(result) => {
                 if let Err(err) = result {
-                    events.read().await.error(err).await;
+                    events.read().error(err).await;
                 }
             }
         }

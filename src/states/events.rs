@@ -31,7 +31,7 @@ pub struct EventsState {
 }
 
 impl EventsState {
-    pub async fn new(_: &AppConfig) -> Self {
+    pub fn new(_: &AppConfig) -> Self {
         let (events, events_recv) = mpsc::unbounded_channel();
 
         Self {
@@ -82,7 +82,7 @@ impl EventsState {
             let mut lock = last_event.lock().await;
             *lock = Instant::now();
 
-            app.events.write().await.current_event = Some(event);
+            app.events.write().current_event = Some(event);
 
             let events = app.events.clone();
             let last_event = last_event.clone();
@@ -97,7 +97,7 @@ impl EventsState {
                     return;
                 }
 
-                events.write().await.current_event = None;
+                events.write().current_event = None;
             });
         }
 

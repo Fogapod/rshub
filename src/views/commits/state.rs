@@ -2,21 +2,24 @@ use std::sync::Arc;
 
 use anyhow::Context;
 
+use tui::widgets::ListState;
+
 use crate::constants::GITHUB_REPO_COMMIT_ENDPOINT_URL;
 use crate::datatypes::commit::{Commit, CommitsJson};
 use crate::states::app::{AppState, TaskResult};
+use crate::states::StatelessList;
 
-pub struct CommitState {
+pub struct State {
     pub items: Vec<Commit>,
+    pub selection: StatelessList<ListState>,
 }
 
-impl CommitState {
-    pub async fn new() -> Self {
-        Self { items: Vec::new() }
-    }
-
-    pub fn count(&self) -> usize {
-        self.items.len()
+impl State {
+    pub fn new() -> Self {
+        Self {
+            items: Vec::new(),
+            selection: StatelessList::new(ListState::default(), false),
+        }
     }
 
     pub async fn load(app: Arc<AppState>) -> TaskResult {
@@ -38,13 +41,12 @@ impl CommitState {
             .await
             .with_context(|| "parsing commits response")?;
 
-        app.commits.write().await.update(commit_range);
+        app.commits
+            .state
+            .write()
+            .items
+            .append(&mut commit_range.0.iter().map(Commit::from).collect());
 
         Ok(())
-    }
-
-    pub fn update(&mut self, data: CommitsJson) {
-        self.items
-            .append(&mut data.0.iter().map(Commit::from).collect());
     }
 }

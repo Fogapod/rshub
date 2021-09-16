@@ -12,19 +12,13 @@ use tui::{
 
 use crate::states::app::AppState;
 use crate::states::events::AppEvent;
-use crate::views::Drawable;
+use crate::views::Draw;
 
 pub struct EventsView {}
 
-#[async_trait::async_trait]
-impl Drawable for EventsView {
-    async fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: Arc<AppState>,
-    ) {
-        if let Some(event) = &app.events.read().await.current_event {
+impl Draw for EventsView {
+    fn draw(&self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>) {
+        if let Some(event) = &app.events.read().current_event {
             let mut style = Style::default().add_modifier(Modifier::BOLD);
             let mut border_style = Style::default();
 

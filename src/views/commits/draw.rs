@@ -6,68 +6,23 @@ use tui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::Text,
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
-use crate::app::AppAction;
-use crate::input::UserInput;
-use crate::states::help::HotKey;
-use crate::states::{AppState, CommitState, StatelessList};
-use crate::views::{Drawable, HotKeys, InputProcessor, Named};
+use crate::states::AppState;
+use crate::views::Draw;
 
-pub struct CommitView {
-    // TODO:
-    //   - on 1st launch: fetch N latest commits, save latest hash
-    //   - on 2nd launch: read latest hash and fetch newer commits
-    loaded: bool,
+use super::Commits;
 
-    state: StatelessList<ListState>,
-}
-
-impl CommitView {
-    pub fn new() -> Self {
-        Self {
-            loaded: false,
-            state: StatelessList::new(ListState::default(), false),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl Named for CommitView {
-    fn name(&self) -> String {
-        "Recent Commit List".to_owned()
-    }
-}
-
-impl HotKeys for CommitView {
-    fn hotkeys(&self) -> Vec<HotKey> {
-        self.state.hotkeys()
-    }
-}
-
-#[async_trait::async_trait]
-impl InputProcessor for CommitView {
-    async fn on_input(&mut self, input: &UserInput, app: Arc<AppState>) -> Option<AppAction> {
-        self.state.on_input(input, app.commits.read().await.count())
-    }
-}
-
-#[async_trait::async_trait]
-impl Drawable for CommitView {
-    async fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: Arc<AppState>,
-    ) {
+impl Draw for Commits {
+    fn draw(&self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>) {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(60), Constraint::Min(0)])
             .split(area);
 
-        let commits = &app.commits.read().await.items;
+        let commits = &self.state.read().items;
 
         let items: Vec<ListItem> = commits
             .iter()
@@ -83,9 +38,9 @@ impl Drawable for CommitView {
             )
             .highlight_style(Style::default().bg(Color::DarkGray));
 
-        f.render_stateful_widget(list, chunks[0], &mut self.state.state);
+        f.render_stateful_widget(list, chunks[0], &mut self.state.write().selection.state);
 
-        if let Some(i) = self.state.state.selected() {
+        if let Some(i) = self.state.read().selection.state.selected() {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(3), Constraint::Min(0)])
@@ -118,13 +73,12 @@ impl Drawable for CommitView {
             );
         }
 
-        if !self.loaded {
-            if !app.config.offline {
-                app.watch_task(tokio::spawn(CommitState::load(Arc::clone(&app))))
-                    .await;
-            }
+        // if !self.loaded {
+        //     if !app.config.offline {
+        //         self.load(app).await;
+        //     }
 
-            self.loaded = true;
-        }
+        //     self.loaded = true;
+        // }
     }
 }

@@ -16,15 +16,15 @@ use crossterm::event::KeyCode;
 use crate::app::AppAction;
 
 use crate::datatypes::geolocation::IP;
+use crate::datatypes::hotkey::HotKey;
 use crate::input::UserInput;
-use crate::states::help::HotKey;
 use crate::states::AppState;
-use crate::views::{AppView, Drawable, HotKeys, InputProcessor, Named};
+use crate::views::{AppView, Draw, HotKeys, Input, Name};
 
 pub struct World {}
 
 #[async_trait::async_trait]
-impl InputProcessor for World {
+impl Input for World {
     async fn on_input(&mut self, input: &UserInput, _: Arc<AppState>) -> Option<AppAction> {
         match input {
             UserInput::Char('m' | 'M') | UserInput::Back => Some(AppAction::CloseView),
@@ -35,7 +35,7 @@ impl InputProcessor for World {
 
 impl AppView for World {}
 
-impl Named for World {
+impl Name for World {
     fn name(&self) -> String {
         "World Map".to_owned()
     }
@@ -58,18 +58,12 @@ impl HotKeys for World {
     }
 }
 
-#[async_trait::async_trait]
-impl Drawable for World {
+impl Draw for World {
     // TODO: render selected with labels by default, all without labels
     // TODO: zoom and map navigation
-    async fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: Arc<AppState>,
-    ) {
-        let locations = &app.locations.read().await.items;
-        let servers = &app.servers.read().await.items;
+    fn draw(&self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>) {
+        let locations = &app.locations.read().items;
+        let servers = &app.servers.state.read().items;
 
         let map = Canvas::default()
             .block(Block::default().borders(Borders::ALL))

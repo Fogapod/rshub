@@ -34,7 +34,7 @@ RSHub requires nightly rust toolchain to build (unstable strip feature).
 If you do not have nightly toolchain, you can prefix cargo commands with `RUSTC_BOOTSTRAP=1 cargo ...` as a workaround.
 
 Install from crates.io (stable version): `cargo install rshub`  
-Or with [geolocation](#geolocation) feature: `cargo install rshub --feature geolocation`
+Or with [geolocation](#geolocation) feature: `cargo install rshub --features geolocation`
 
 Run from source (latest version):
 `cargo run` or `cargo run --release` (slow)

@@ -14,23 +14,21 @@ use tui::{
 };
 
 use crate::app::AppAction;
+use crate::datatypes::hotkey::HotKey;
 use crate::input::UserInput;
-use crate::states::help::HotKey;
 use crate::states::AppState;
-use crate::views::{AppView, Drawable, HotKeys, InputProcessor, Named};
+use crate::views::{AppView, Draw, HotKeys, Input, Name};
 
 pub struct Help {}
 
 impl AppView for Help {}
 
-#[async_trait::async_trait]
-impl Named for Help {
+impl Name for Help {
     fn name(&self) -> String {
         "Help Screen".to_owned()
     }
 }
 
-#[async_trait::async_trait]
 impl HotKeys for Help {
     fn hotkeys(&self) -> Vec<HotKey> {
         vec![HotKey {
@@ -42,7 +40,7 @@ impl HotKeys for Help {
 }
 
 #[async_trait::async_trait]
-impl InputProcessor for Help {
+impl Input for Help {
     async fn on_input(&mut self, input: &UserInput, _: Arc<AppState>) -> Option<AppAction> {
         match input {
             UserInput::Back => Some(AppAction::CloseView),
@@ -51,15 +49,9 @@ impl InputProcessor for Help {
     }
 }
 
-#[async_trait::async_trait]
-impl Drawable for Help {
-    async fn draw(
-        &mut self,
-        f: &mut Frame<CrosstermBackend<io::Stdout>>,
-        area: Rect,
-        app: Arc<AppState>,
-    ) {
-        let help = app.help.lock().unwrap();
+impl Draw for Help {
+    fn draw(&self, f: &mut Frame<CrosstermBackend<io::Stdout>>, area: Rect, app: Arc<AppState>) {
+        let help = app.help.lock();
 
         let list_length = (help.global_hotkeys.len() + help.local_hotkeys.len()) as u16
         + 2  // outer border

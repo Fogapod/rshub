@@ -17,7 +17,7 @@ pub struct LocationsState {
 }
 
 impl LocationsState {
-    pub async fn new(_: &AppConfig) -> Self {
+    pub fn new(_: &AppConfig) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
 
         Self {
@@ -88,7 +88,7 @@ impl LocationsState {
 
         log::debug!("resolved location: {:?} -> {:?}", ip, location);
 
-        app.locations.write().await.items.insert(ip, location);
+        app.locations.write().items.insert(ip, location);
 
         Ok(())
     }
