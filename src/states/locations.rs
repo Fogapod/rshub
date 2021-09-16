@@ -17,7 +17,7 @@ pub struct LocationsState {
 }
 
 impl LocationsState {
-    pub async fn new(_: &AppConfig) -> Self {
+    pub fn new(_: &AppConfig) -> Self {
         let (tx, rx) = mpsc::unbounded_channel();
 
         Self {

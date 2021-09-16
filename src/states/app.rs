@@ -1,12 +1,12 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use parking_lot::{Mutex, RwLock};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use anyhow::Result;
 
-use crate::app::AppAction;
+use crate::app::{AppAction, StopSignal};
 use crate::config::AppConfig;
 use crate::constants::USER_AGENT;
 use crate::datatypes::hotkey::HotKey;
@@ -33,18 +33,18 @@ pub struct AppState {
 
     pub client: reqwest::Client,
 
-    panic_bool: Arc<AtomicBool>,
+    kill_switch: mpsc::Sender<StopSignal>,
 }
 
 impl AppState {
-    pub async fn new(config: AppConfig, panic_bool: Arc<AtomicBool>) -> Arc<Self> {
+    pub fn new(config: AppConfig, kill_switch: mpsc::Sender<StopSignal>) -> Self {
         #[cfg(feature = "geolocation")]
-        let locations = Arc::new(RwLock::new(LocationsState::new(&config).await));
+        let locations = Arc::new(RwLock::new(LocationsState::new(&config)));
         let versions = Versions::new();
         let servers = Servers::new();
-        let events = Arc::new(RwLock::new(EventsState::new(&config).await));
+        let events = Arc::new(RwLock::new(EventsState::new(&config)));
 
-        let instance = Arc::new(Self {
+        Self {
             commits: Commits::new(),
             versions: versions.clone(),
             #[cfg(feature = "geolocation")]
@@ -59,15 +59,16 @@ impl AppState {
 
             help: Mutex::new(HelpState::new()),
 
-            panic_bool,
-        });
+            kill_switch,
+        }
+    }
 
-        events.write().run(instance.clone()).await;
-        servers.run(instance.clone()).await;
+    pub async fn run(&self, instance: Arc<Self>) {
+        self.events.write().run(instance.clone()).await;
+        self.servers.run(instance.clone()).await;
         #[cfg(feature = "geolocation")]
-        locations.write().run(instance.clone()).await;
-        //versions.write().await.run(instance.clone()).await;
-        instance
+        self.locations.write().run(instance.clone()).await;
+        //self.versions.write().await.run(instance.clone()).await;
     }
 
     pub async fn on_action(&self, action: &AppAction, app: Arc<AppState>) {
@@ -111,14 +112,14 @@ impl AppState {
     pub async fn watch_task(&self, task: JoinHandle<TaskResult>) {
         tokio::spawn(Self::wrap_task(
             task,
-            self.panic_bool.clone(),
+            self.kill_switch.clone(),
             self.events.clone(),
         ));
     }
 
     async fn wrap_task(
         task: JoinHandle<TaskResult>,
-        panic_bool: Arc<AtomicBool>,
+        kill_switch: mpsc::Sender<StopSignal>,
         events: Arc<RwLock<EventsState>>,
     ) {
         match task.await {
@@ -127,7 +128,7 @@ impl AppState {
 
                 if err.is_panic() {
                     log::error!("error is panic, setting panic to exit on next tick");
-                    panic_bool.store(true, Ordering::Relaxed);
+                    kill_switch.send(StopSignal::Panic).await.unwrap();
                 }
             }
             Ok(result) => {

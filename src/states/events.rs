@@ -31,7 +31,7 @@ pub struct EventsState {
 }
 
 impl EventsState {
-    pub async fn new(_: &AppConfig) -> Self {
+    pub fn new(_: &AppConfig) -> Self {
         let (events, events_recv) = mpsc::unbounded_channel();
 
         Self {

@@ -1,10 +1,17 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::io;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::time::Duration;
 
 use tui::backend::CrosstermBackend;
-use tui::terminal::Frame;
+use tui::terminal::{Frame, Terminal};
+
+use crossterm::event::EventStream;
+
+use futures::StreamExt;
+
+use tokio::sync::mpsc;
 
 use crate::config::AppConfig;
 use crate::datatypes::game_version::GameVersion;
@@ -14,6 +21,12 @@ use crate::states::app::AppState;
 #[cfg(feature = "geolocation")]
 use crate::views::world::World;
 use crate::views::{events::EventsView, help::Help, tabs::Tabs, AppView, Draw, ViewType};
+
+#[derive(Debug)]
+pub enum StopSignal {
+    UserExit,
+    Panic,
+}
 
 #[derive(Debug)]
 pub enum AppAction {
@@ -39,14 +52,14 @@ pub struct App {
 
     events_view: EventsView,
 
-    pub stopped: bool,
-    pub panicked: Arc<AtomicBool>,
+    pub kill_switch: mpsc::Sender<StopSignal>,
+    kill_switch_recv: mpsc::Receiver<StopSignal>,
 }
 
 impl App {
-    pub async fn new(config: AppConfig) -> Self {
-        let panic_bool = Arc::new(AtomicBool::new(false));
-        let state = AppState::new(config, panic_bool.clone()).await;
+    pub fn new(config: AppConfig) -> Self {
+        let (kill_switch, kill_switch_recv) = mpsc::channel(1);
+        let state = Arc::new(AppState::new(config, kill_switch.clone()));
 
         let mut instance = Self {
             state,
@@ -56,8 +69,8 @@ impl App {
 
             events_view: EventsView {},
 
-            stopped: false,
-            panicked: panic_bool,
+            kill_switch,
+            kill_switch_recv,
         };
 
         instance.register_view(ViewType::Tab, Box::new(Tabs::new()));
@@ -72,7 +85,57 @@ impl App {
         self.views.insert(tp, view);
     }
 
-    pub async fn draw(&mut self, f: &mut Frame<'_, CrosstermBackend<io::Stdout>>) {
+    pub async fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) {
+        self.state.run(Arc::clone(&self.state)).await;
+
+        let interval = Duration::from_millis(200);
+        let mut delay = tokio::time::interval(interval);
+        let mut reader = EventStream::new();
+
+        loop {
+            tokio::select! {
+                _ = delay.tick() => {
+                    terminal.draw(|f| self.draw(f)).unwrap();
+                },
+                maybe_event = reader.next() => {
+                    match maybe_event {
+                        Some(Ok(event)) => {
+                            if let Ok(valid_input) = UserInput::try_from(&event) {
+                                self.on_input(&valid_input).await;
+                            }
+                        },
+                        Some(Err(err)) => {
+                            log::error!("Error reading input: {}", err);
+                            break;
+                        }
+                        None => {
+                            log::error!("Input channel closed somehow");
+                            break
+                        },
+                    }
+                },
+                stop = self.kill_switch_recv.recv() => {
+                    if let Some(stop) = stop {
+                        match stop {
+                            StopSignal::UserExit => {
+                                log::info!("app stopped, cleaning up");
+                                break;
+                            }
+                            StopSignal::Panic => {
+                                log::error!("app panicked, cleaning up");
+                                break;
+                            }
+                        }
+                    } else {
+                        log::error!("kill_switch channel closed somehow");
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn draw(&mut self, f: &mut Frame<'_, CrosstermBackend<io::Stdout>>) {
         if let Some(tp) = self.view_stack.last() {
             if let Some(widget) = self.views.get_mut(tp) {
                 use tui::layout::{Constraint, Direction, Layout};
@@ -99,7 +162,9 @@ impl App {
         log::debug!("input: {:?}", input);
 
         match input {
-            UserInput::Quit => self.stop(),
+            UserInput::Quit => {
+                self.kill_switch.send(StopSignal::UserExit).await.unwrap();
+            }
             UserInput::Help => {
                 if let Some(top_view_type) = self.view_stack.last() {
                     if top_view_type == &ViewType::Help {
@@ -131,9 +196,5 @@ impl App {
                 }
             }
         }
-    }
-
-    fn stop(&mut self) {
-        self.stopped = true;
     }
 }
