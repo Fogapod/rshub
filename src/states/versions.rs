@@ -490,12 +490,7 @@ impl VersionsState {
                 .arg("--server")
                 .arg(address.ip.to_string())
                 .arg("--port")
-                .arg(address.port.to_string())
-                // these are required for custom port and server because of bug
-                .arg("--refreshtoken")
-                .arg("gibberish")
-                .arg("--uid")
-                .arg("gibberish");
+                .arg(address.port.to_string());
         }
         command
             .stdin(Stdio::null())

@@ -20,7 +20,7 @@ UnityStation is a modern remake of Space Station 13 in Unity.
 | written in rust | yes | no |
 | ian icon | no | [broken](https://github.com/unitystation/stationhub/issues/111) |
 
-[1] Even though launching game without auth has major inconveniences, described in [issues](#issues), I am not planning to support firebase (unitystation is switching to their own provider).
+[1] I am not planning to support firebase auth, unitystation is switching to their own provider.
 
 ### Platform support
 - Linux: developed and tested on.
@@ -44,11 +44,9 @@ Run from source (latest version):
 - Press F1 on any screen to show hotkeys.
 
 ### Issues
-There are multiple issues using RSHub currently:
+Possible problems and fixes:
 - Linux, i3 specific: game starts in fullscreen in bad resolution. Solution: uncheck fullscreen mode in game settings.
-- You will get auth error when connecting to server. This is because of a workaround for this bug: https://github.com/unitystation/unitystation/issues/7375
-- When connecting to server, you will have to uncheck `Host Server` checkbox because of this bug: https://github.com/unitystation/unitystation/issues/7376
-- When connecting to server, you will have to enter your password each time. Autologin is broken: https://github.com/unitystation/unitystation/issues/7377
+- rshub 0.1.5 only supports servers of version UnityStationDevelop-21092504 and later because of auth changes. If you need to connect to older builds, you must use rshub 0.1.4.
 
 ### Geolocation
 Currently geolocation feature (world map) is opt-in at compile time because of security cencerns.

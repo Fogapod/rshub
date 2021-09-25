@@ -145,7 +145,7 @@ impl Server {
             players,
             fps,
             version,
-            address: address.clone(),
+            address,
             // updated: true,
             offline: false,
         }
