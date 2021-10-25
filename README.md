@@ -14,7 +14,7 @@ UnityStation is a modern remake of Space Station 13 in Unity.
 | connect to server | yes | yes |
 | ping servers | no | yes |
 | manage installations (add/remove) | yes | yes |
-| run local installation | yes | [broken](https://github.com/unitystation/stationhub/issues/128) |
+| run local installation | yes | yes |
 | news/commits section | yes | yes |
 | show servers on map (useless) | yes | no |
 | written in rust | yes | no |
