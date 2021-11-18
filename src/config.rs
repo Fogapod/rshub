@@ -3,7 +3,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use clap::Clap;
+use clap::Parser;
 
 #[cfg(feature = "geolocation")]
 use crate::constants::DEFAULT_GEO_PROVIDER_URL;
@@ -20,7 +20,7 @@ fn greater_than_5(s: &str) -> Result<u64, String> {
     }
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(version = clap::crate_version!(), about = "UnityStation server hub")]
 struct CliArgs {
     /// Log file path
