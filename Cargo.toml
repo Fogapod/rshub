@@ -2,7 +2,7 @@ cargo-features = ["strip"]
 
 [package]
 name = "rshub"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["Fogapod <fogaprod@gmail.com>"]
 edition = "2018"
 description = "Unofficial game launcher for UnityStation"
@@ -55,6 +55,11 @@ features = ["crossterm"]
 version = "=3.0.0-beta.5"
 default-features = false
 features = ["std", "derive", "cargo", "env", "suggestions"]
+
+# must be locked separately because clap doesn't have strict version requirement for this
+# and it can suddenly break after breaking change
+[dependencies.clap_derive]
+version = "=3.0.0-beta.5"
 
 [dependencies.serde]
 version = "1"
